@@ -13,7 +13,19 @@ Originally built for the Hermes multi-agent system, Squad-Mind is fully generali
 - **Developers** who want their own private, extensible AI agent system
 - **Teams** who need structured agent workflows with shared knowledge
 - **Builders** who want to prototype multi-agent setups without boilerplate
+- **Individuals** who want to automate their life — health tracking, financial planning, learning, and daily productivity — with agents that actually remember context
 - Anyone with at least one LLM API key who believes AI works better in teams
+
+## Personal Use: Your Life, Automated
+
+Squad-Mind isn't just for engineering teams. It's how we personally manage:
+
+- **Health** — track checkups, medications, vaccinations, and insurance across family members
+- **Finance** — net worth, monthly budgets, investments, tax planning, and action items
+- **Knowledge** — a Home-Brain vault that agents read and write to, so nothing is lost between sessions
+- **Daily priorities** — agents start every session knowing what's top of mind
+
+Your agents become teammates for life, not just work.
 
 ## Quick Start
 
