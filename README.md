@@ -1,24 +1,27 @@
-# Hermes Setup Kit
+# Squad-Mind
 
-A shareable, agent-executable bootstrap kit for the Hermes multi-agent personal AI system.
+A shareable, agent-executable bootstrap kit for building end-to-end AI agent teams with a shared knowledge brain.
 
-## What is Hermes?
+## What is Squad-Mind?
 
-Hermes is a multi-agent AI system built around an Obsidian vault ("Home-Brain") as the shared knowledge substrate. Specialized agents handle different domains — coding, research, finance, health, monitoring — all orchestrated by a central coordinator.
+Squad-Mind helps you spin up a **team of specialized AI agents** — each with their own role, model, and purpose — all connected to a shared **Home-Brain vault** (an Obsidian-compatible Markdown knowledge base).
+
+Originally built for the Hermes multi-agent system, Squad-Mind is fully generalized: use it for personal productivity, professional workflows, or any project where a team of AI agents needs structured memory and coordination.
 
 ## Who is this for?
 
-- Developers who want their own private, extensible AI agent system
-- People who prefer local-first knowledge management (Obsidian + Markdown)
-- Anyone with at least one LLM API key who wants structured agent workflows
+- **Developers** who want their own private, extensible AI agent system
+- **Teams** who need structured agent workflows with shared knowledge
+- **Builders** who want to prototype multi-agent setups without boilerplate
+- Anyone with at least one LLM API key who believes AI works better in teams
 
 ## Quick Start
 
 ### Option A: Native Installation (default)
 
 ```bash
-git clone <this-repo> hermes-setup
-cd hermes-setup
+git clone https://github.com/MasteMind/Squad-Mind.git
+cd Squad-Mind
 # Run with any capable CLI agent (Claude Code, Kimi, Codex, etc.)
 # Or run the bootstrap scripts manually:
 ./bootstrap/00-prereqs.sh
@@ -39,7 +42,7 @@ docker-compose -f docker-compose.bootstrap.yml up
 
 1. **Obsidian** (optional — skipped with `--headless` for servers)
 2. **Home-Brain vault** — structured Markdown knowledge base at your chosen path
-3. **Hermes runtime** (`~/.hermes`) — agent profiles, bot configs, scripts
+3. **Agent runtime** (`~/.hermes`) — agent profiles, bot configs, scripts
 4. **Sub-agents** — wired to your chosen LLM providers
 5. **Starter projects** — Health Management and Finance Management templates
 
@@ -57,7 +60,7 @@ The kit asks you ~15 questions up front (name, timezone, which agents to enable,
 ## Project Structure
 
 ```
-hermes-setup/
+Squad-Mind/
 ├── AGENTS.md              # "README for agents" — machine-readable execution guide
 ├── setup.md               # Human-readable runbook
 ├── INTERVIEW.md           # Scripted Q&A for setup personalization
@@ -83,4 +86,4 @@ hermes-setup/
 
 ## License
 
-MIT — share with your brother, your friend, your future self.
+MIT — share with your team, your friend, your future self.
