@@ -1,0 +1,6 @@
+# Pinned tool versions for mise / asdf / uv users
+# These versions are tested and known to work with the Hermes setup kit
+
+node 22.14.0
+python 3.12.9
+uv 0.6.14

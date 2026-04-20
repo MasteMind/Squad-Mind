@@ -1,0 +1,35 @@
+# Secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Setup state (machine-specific, not shareable)
+hermes-setup.state
+setup_answers.yaml
+
+# Logs
+bootstrap/log/
+*.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor artifacts
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Node / Python
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Vault content (user-generated, not committed)
+templates/vault/
+!templates/vault/**/.gitkeep

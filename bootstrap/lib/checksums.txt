@@ -1,0 +1,9 @@
+# SHA256 checksums for external downloads
+# Update these when pinning new versions
+
+# Obsidian v1.8.10 (example — replace with actual pinned version)
+# obsidian_1.8.10_amd64.deb  SHA256=0000000000000000000000000000000000000000000000000000000000000000
+# Obsidian-1.8.10.dmg        SHA256=0000000000000000000000000000000000000000000000000000000000000000
+
+# Placeholder — installer will warn if checksums are missing
+# Run: sha256sum obsidian_*.deb Obsidian-*.dmg >> bootstrap/lib/checksums.txt

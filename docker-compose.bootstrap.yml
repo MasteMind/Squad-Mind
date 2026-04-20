@@ -1,0 +1,37 @@
+version: "3.8"
+
+# Docker fast-path for Hermes Setup Kit
+# Optional: runs the entire setup in an isolated Debian container
+# Native installation is the default; use this for guaranteed consistency
+
+services:
+  hermes-setup:
+    image: debian:12-slim
+    container_name: hermes-bootstrap
+    volumes:
+      - .:/workspace:rw
+      - hermes-runtime:/root/.hermes
+    working_dir: /workspace
+    environment:
+      - DEBIAN_FRONTEND=noninteractive
+      - HERMES_HOME=/root/.hermes
+    command: >
+      bash -c "
+        apt-get update -qq &&
+        apt-get install -y -qq curl git python3 python3-pip python3-yaml expect debconf-utils ca-certificates &&
+        pip3 install requests pyyaml --quiet &&
+        cd /workspace &&
+        ./bootstrap/00-prereqs.sh &&
+        ./bootstrap/10-obsidian.sh --headless &&
+        ./bootstrap/20-hermes-core.sh &&
+        ./bootstrap/30-vault-seed.sh &&
+        ./bootstrap/40-agents-wire.sh &&
+        ./bootstrap/50-smoke-test.sh &&
+        echo 'Setup complete! Report:' &&
+        cat smoke-test-report.json
+      "
+    stdin_open: true
+    tty: true
+
+volumes:
+  hermes-runtime:
