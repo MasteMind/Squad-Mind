@@ -1,12 +1,12 @@
 ---
-title: "[FEATURE] Add shellcheck to CI for all bash scripts"
-labels: ["feature", "ci", "quality"]
+title: "Add shellcheck to CI"
+labels: ["feature", "low", "ci", "quality"]
 ---
 
-## Description
-No automated linting for shell scripts. Common bash bugs (unquoted variables, missing error handling) slip through.
+## Problem
+No automated linting for shell scripts. Common bash bugs (unquoted variables, missing error handling) can slip into releases.
 
-## Proposed Solution
+## Proposed Fix
 GitHub Actions workflow:
 
 ```yaml
@@ -24,9 +24,9 @@ jobs:
           scandir: './bootstrap ./scripts'
 ```
 
-Fix existing violations first, then enforce in CI.
+Fix all existing violations before enabling.
 
 ## Acceptance Criteria
 - [ ] All `.sh` files pass `shellcheck`
 - [ ] CI fails on shellcheck warnings
-- [ ] CONTRIBUTING.md documents shellcheck requirement
+- [ ] Documented in CONTRIBUTING.md

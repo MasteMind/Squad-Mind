@@ -1,12 +1,12 @@
 ---
-title: "[FEATURE] Add health checks to docker-compose.bootstrap.yml"
-labels: ["feature", "docker", "reliability"]
+title: "Add Docker health checks to docker-compose.bootstrap.yml"
+labels: ["feature", "low", "docker", "reliability"]
 ---
 
-## Description
-The Docker bootstrap config has no health checks. Containers may appear "running" while the service inside is broken.
+## Problem
+The Docker fast-path has no health checks. Containers may appear "running" while the service inside is broken.
 
-## Proposed Solution
+## Proposed Fix
 Add `healthcheck` to docker-compose:
 
 ```yaml
