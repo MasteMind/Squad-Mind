@@ -30,6 +30,10 @@ __pycache__/
 .venv/
 venv/
 
+# Promotion / marketing materials (not for public repo)
+PROMOTION_*.md
+LINKEDIN_POST_*.md
+
 # Vault content (user-generated, not committed)
 templates/vault/
 !templates/vault/**/.gitkeep
