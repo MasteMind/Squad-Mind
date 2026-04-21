@@ -18,17 +18,43 @@ Read this file first, then execute stages in `bootstrap/` in order, respecting `
 - Internet access required
 - At least 1 GB free disk space in `$HOME`
 - User has sudo OR accepts user-space install fallbacks
-- At least one LLM API key (Anthropic, Google, Kimi, OpenRouter, or Ollama local)
+- At least one LLM provider:
+  - **API keys** for Anthropic, Google, Kimi, OpenRouter, or Ollama local; OR
+  - **CLI subscriptions** (Claude Max, Gemini Advanced) for proxy mode
 
 ---
+
+## Provider Modes
+
+The kit supports two ways to connect to LLMs:
+
+| Mode | Requirements | Best For |
+|------|-------------|----------|
+| **API keys** | Provider API keys | Users with API credits, no CLI subscriptions |
+| **CLI proxy** | `llm-cli-proxy` npm package + authenticated CLI | Users with Claude Max or Gemini Advanced subscriptions |
+
+### Proxy Mode Quick Start
+
+If the user chooses CLI proxy mode during interview:
+
+1. Ensure `llm-cli-proxy` is installed: `npm install -g llm-cli-proxy`
+2. Ensure CLIs are installed and authenticated:
+   - Claude: `npm install -g @anthropic-ai/claude-code` then `claude login`
+   - Gemini: `npm install -g @google/gemini-cli` then `gemini login`
+3. After Stage 4 (`40-agents-wire.sh`), start proxies:
+   ```bash
+   ./scripts/start-proxies.sh
+   ```
+4. Proxies run in `screen` sessions. Verify: `screen -ls`
 
 ## Execution Order
 
 1. Read `setup.md` for the human-facing narrative and context.
 2. Read `INTERVIEW.md` — ask the user all questions and write answers to `setup_answers.yaml`.
 3. Execute `bootstrap/00-prereqs.sh` through `bootstrap/50-smoke-test.sh` in numeric order.
-4. After each stage, check `hermes-setup.state` to confirm the step advanced.
-5. If a stage fails, stop. Do not proceed. Report the failure and await user input.
+4. **If proxy mode:** Run `./scripts/start-proxies.sh` after Stage 4.
+5. After each stage, check `hermes-setup.state` to confirm the step advanced.
+6. If a stage fails, stop. Do not proceed. Report the failure and await user input.
 
 ---
 
@@ -52,7 +78,8 @@ Every stage script contains a **verification block** at the bottom. You must run
 - `grep -r '\${' "$VAULT_PATH"` → must return zero matches after interpolation
 - `ls -ld ~/.hermes` → must show `drwx------`
 - `stat -c '%a' .env` → must show `600`
-- Provider `models` endpoint → must return HTTP 200
+- Provider `models` endpoint (API-keys mode) → must return HTTP 200
+- Proxy `/health` endpoint (proxy mode) → must return HTTP 200
 
 ---
 

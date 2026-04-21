@@ -39,43 +39,89 @@ if [[ -f ".env" ]]; then
     export $(grep -v '^#' .env | xargs) 2>/dev/null || true
 fi
 
-if [[ -n "${ANTHROPIC_API_KEY:-}" ]] && [[ "${ANTHROPIC_API_KEY:-}" != sk-ant-api03-... ]]; then
-    if curl -s -o /dev/null -w "%{http_code}" \
-        -H "x-api-key: $ANTHROPIC_API_KEY" \
-        -H "anthropic-version: 2023-06-01" \
-        https://api.anthropic.com/v1/models | grep -q "200"; then
-        record "anthropic_models" "PASS" "Models endpoint reachable"
-    else
-        record "anthropic_models" "FAIL" "Models endpoint unreachable or key invalid"
-    fi
-fi
+PROVIDER_MODE=$(python3 -c "
+import yaml
+with open('setup_answers.yaml') as f:
+    data = yaml.safe_load(f)
+print(data.get('providers', {}).get('mode', 'api-keys'))
+")
 
-if [[ -n "${GOOGLE_API_KEY:-}" ]] && [[ "${GOOGLE_API_KEY:-}" != AIza... ]]; then
-    if curl -s -o /dev/null -w "%{http_code}" \
-        "https://generativelanguage.googleapis.com/v1beta/models?key=$GOOGLE_API_KEY" | grep -q "200"; then
-        record "google_models" "PASS" "Models endpoint reachable"
-    else
-        record "google_models" "FAIL" "Models endpoint unreachable or key invalid"
-    fi
-fi
+if [[ "$PROVIDER_MODE" == "cli-proxy" ]]; then
+    # Proxy mode: check local proxy health endpoints
+    info "Testing CLI proxy connectivity..."
 
-if [[ -n "${KIMI_API_KEY:-}" ]] && [[ "${KIMI_API_KEY:-}" != sk-... ]]; then
-    if curl -s -o /dev/null -w "%{http_code}" \
-        -H "Authorization: Bearer $KIMI_API_KEY" \
-        https://api.moonshot.cn/v1/models | grep -q "200"; then
-        record "kimi_models" "PASS" "Models endpoint reachable"
-    else
-        record "kimi_models" "FAIL" "Models endpoint unreachable or key invalid"
+    if [[ -n "${CLAUDE_PROXY_URL:-}" ]] && [[ "$CLAUDE_PROXY_URL" != *"local-proxy"* ]]; then
+        if curl -s -o /dev/null -w "%{http_code}" \
+            "${CLAUDE_PROXY_URL%/v1}/health" | grep -q "200"; then
+            record "claude_proxy" "PASS" "Claude proxy healthy at $CLAUDE_PROXY_URL"
+        else
+            record "claude_proxy" "FAIL" "Claude proxy not responding at $CLAUDE_PROXY_URL"
+        fi
     fi
-fi
 
-if [[ -n "${OPENROUTER_API_KEY:-}" ]] && [[ "${OPENROUTER_API_KEY:-}" != sk-or-v1-... ]]; then
-    if curl -s -o /dev/null -w "%{http_code}" \
-        -H "Authorization: Bearer $OPENROUTER_API_KEY" \
-        https://openrouter.ai/api/v1/models | grep -q "200"; then
-        record "openrouter_models" "PASS" "Models endpoint reachable"
-    else
-        record "openrouter_models" "FAIL" "Models endpoint unreachable or key invalid"
+    if [[ -n "${GEMINI_PROXY_URL:-}" ]] && [[ "$GEMINI_PROXY_URL" != *"local-proxy"* ]]; then
+        if curl -s -o /dev/null -w "%{http_code}" \
+            "${GEMINI_PROXY_URL%/v1}/health" | grep -q "200"; then
+            record "gemini_proxy" "PASS" "Gemini proxy healthy at $GEMINI_PROXY_URL"
+        else
+            record "gemini_proxy" "FAIL" "Gemini proxy not responding at $GEMINI_PROXY_URL"
+        fi
+    fi
+
+    # Also test a live chat completion on the first available proxy
+    if [[ -n "${CLAUDE_PROXY_URL:-}" ]]; then
+        if curl -s -o /dev/null -w "%{http_code}" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${CLAUDE_PROXY_KEY:-local-proxy}" \
+            -d '{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"hi"}]}' \
+            "$CLAUDE_PROXY_URL/chat/completions" | grep -q "200"; then
+            record "claude_proxy_chat" "PASS" "Chat completions working via Claude proxy"
+        else
+            record "claude_proxy_chat" "FAIL" "Chat completions failed via Claude proxy"
+        fi
+    fi
+else
+    # Direct API keys mode
+    info "Testing direct API provider connectivity..."
+
+    if [[ -n "${ANTHROPIC_API_KEY:-}" ]] && [[ "${ANTHROPIC_API_KEY:-}" != sk-ant-api03-... ]]; then
+        if curl -s -o /dev/null -w "%{http_code}" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            https://api.anthropic.com/v1/models | grep -q "200"; then
+            record "anthropic_models" "PASS" "Models endpoint reachable"
+        else
+            record "anthropic_models" "FAIL" "Models endpoint unreachable or key invalid"
+        fi
+    fi
+
+    if [[ -n "${GOOGLE_API_KEY:-}" ]] && [[ "${GOOGLE_API_KEY:-}" != AIza... ]]; then
+        if curl -s -o /dev/null -w "%{http_code}" \
+            "https://generativelanguage.googleapis.com/v1beta/models?key=$GOOGLE_API_KEY" | grep -q "200"; then
+            record "google_models" "PASS" "Models endpoint reachable"
+        else
+            record "google_models" "FAIL" "Models endpoint unreachable or key invalid"
+        fi
+    fi
+
+    if [[ -n "${KIMI_API_KEY:-}" ]] && [[ "${KIMI_API_KEY:-}" != sk-... ]]; then
+        if curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $KIMI_API_KEY" \
+            https://api.moonshot.cn/v1/models | grep -q "200"; then
+            record "kimi_models" "PASS" "Models endpoint reachable"
+        else
+            record "kimi_models" "FAIL" "Models endpoint unreachable or key invalid"
+        fi
+    fi
+
+    if [[ -n "${OPENROUTER_API_KEY:-}" ]] && [[ "${OPENROUTER_API_KEY:-}" != sk-or-v1-... ]]; then
+        if curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+            https://openrouter.ai/api/v1/models | grep -q "200"; then
+            record "openrouter_models" "PASS" "Models endpoint reachable"
+        else
+            record "openrouter_models" "FAIL" "Models endpoint unreachable or key invalid"
+        fi
     fi
 fi
 
@@ -146,11 +192,47 @@ if [[ "$PLATFORM" == "telegram" ]] && [[ -n "${TELEGRAM_BOT_TOKEN_HERMES:-}" ]];
 fi
 
 # ------------------------------------------------------------------
+# Test 6: Proxy prerequisites (if proxy mode)
+# ------------------------------------------------------------------
+if [[ "$PROVIDER_MODE" == "cli-proxy" ]]; then
+    if command -v llm-cli-proxy >/dev/null 2>&1; then
+        record "llm_cli_proxy_installed" "PASS" "llm-cli-proxy found in PATH"
+    else
+        record "llm_cli_proxy_installed" "WARN" "llm-cli-proxy not found. Run: npm install -g llm-cli-proxy"
+    fi
+
+    CLI_PROXY_ENABLED=$(python3 -c "
+import yaml
+with open('setup_answers.yaml') as f:
+    data = yaml.safe_load(f)
+for p in data.get('providers', {}).get('cli_proxy', {}).get('enabled', []):
+    print(p)
+")
+
+    if echo "$CLI_PROXY_ENABLED" | grep -q "claude"; then
+        if command -v claude >/dev/null 2>&1; then
+            record "claude_cli_installed" "PASS" "claude CLI found"
+        else
+            record "claude_cli_installed" "FAIL" "claude CLI not found. Install: npm install -g @anthropic-ai/claude-code"
+        fi
+    fi
+
+    if echo "$CLI_PROXY_ENABLED" | grep -q "gemini"; then
+        if command -v gemini >/dev/null 2>&1; then
+            record "gemini_cli_installed" "PASS" "gemini CLI found"
+        else
+            record "gemini_cli_installed" "FAIL" "gemini CLI not found. Install: npm install -g @google/gemini-cli"
+        fi
+    fi
+fi
+
+# ------------------------------------------------------------------
 # Write report
 # ------------------------------------------------------------------
 {
     echo "{"
     echo "  \"timestamp\": \"$(date -Iseconds)\","
+    echo "  \"provider_mode\": \"$PROVIDER_MODE\","
     echo "  \"overall\": \"$OVERALL\","
     echo "  \"tests\": ["
     for i in "${!RESULTS[@]}"; do

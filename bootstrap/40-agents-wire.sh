@@ -21,7 +21,15 @@ for agent in data.get('agents', {}).get('enabled', []):
     print(agent)
 ")
 
+PROVIDER_MODE=$(python3 -c "
+import yaml
+with open('setup_answers.yaml') as f:
+    data = yaml.safe_load(f)
+print(data.get('providers', {}).get('mode', 'api-keys'))
+")
+
 info "Enabled agents: $ENABLED_AGENTS"
+info "Provider mode: $PROVIDER_MODE"
 
 # ------------------------------------------------------------------
 # Create .env from template
@@ -42,19 +50,40 @@ with open('setup_answers.yaml') as f:
 with open('.env') as f:
     env = f.read()
 
-providers = config.get('providers', {})
-mappings = {
-    'anthropic': 'ANTHROPIC_API_KEY',
-    'google': 'GOOGLE_API_KEY',
-    'kimi': 'KIMI_API_KEY',
-    'openrouter': 'OPENROUTER_API_KEY',
-    'openai': 'OPENAI_API_KEY',
-}
+provider_mode = config.get('providers', {}).get('mode', 'api-keys')
 
-for provider, env_var in mappings.items():
-    key = providers.get(provider, {}).get('api_key', '')
-    if key:
-        env = re.sub(rf'^{env_var}=.*$', f'{env_var}={key}', env, flags=re.MULTILINE)
+# Set PROXY_MODE
+env = re.sub(r'^PROXY_MODE=.*$', f'PROXY_MODE={"true" if provider_mode == "cli-proxy" else "false"}', env, flags=re.MULTILINE)
+
+if provider_mode == 'api-keys':
+    # Direct API keys mode
+    providers = config.get('providers', {})
+    mappings = {
+        'anthropic': 'ANTHROPIC_API_KEY',
+        'google': 'GOOGLE_API_KEY',
+        'kimi': 'KIMI_API_KEY',
+        'openrouter': 'OPENROUTER_API_KEY',
+        'openai': 'OPENAI_API_KEY',
+    }
+
+    for provider, env_var in mappings.items():
+        key = providers.get(provider, {}).get('api_key', '')
+        if key:
+            env = re.sub(rf'^{env_var}=.*$', f'{env_var}={key}', env, flags=re.MULTILINE)
+
+elif provider_mode == 'cli-proxy':
+    # CLI proxy mode — configure proxy ports
+    cli_proxy = config.get('providers', {}).get('cli_proxy', {})
+    enabled_proxies = cli_proxy.get('enabled', [])
+    ports = cli_proxy.get('ports', {})
+
+    if 'claude' in enabled_proxies:
+        port = ports.get('claude', 3456)
+        env = re.sub(r'^CLAUDE_PROXY_URL=.*$', f'CLAUDE_PROXY_URL=http://127.0.0.1:{port}/v1', env, flags=re.MULTILINE)
+
+    if 'gemini' in enabled_proxies:
+        port = ports.get('gemini', 3457)
+        env = re.sub(r'^GEMINI_PROXY_URL=.*$', f'GEMINI_PROXY_URL=http://127.0.0.1:{port}/v1', env, flags=re.MULTILINE)
 
 # Paths
 vault = config.get('paths', {}).get('vault', '')
@@ -112,6 +141,7 @@ with open('setup_answers.yaml') as f:
 
 enabled = config.get('agents', {}).get('enabled', [])
 roster = config.get('agents', {}).get('roster', {})
+provider_mode = config.get('providers', {}).get('mode', 'api-keys')
 
 with open("""$VAULT_PATH""" + '/AGENT_ROSTER.md', 'a') as f:
     for agent_id in enabled:
@@ -119,7 +149,14 @@ with open("""$VAULT_PATH""" + '/AGENT_ROSTER.md', 'a') as f:
         name = info.get('name', agent_id.title())
         provider = info.get('provider', 'unknown')
         model = info.get('model', 'unknown')
-        f.write(f"| {name} | {agent_id} | {provider} | {model} | active |\n")
+        # Add proxy note if applicable
+        note = ""
+        if provider_mode == 'cli-proxy':
+            if provider in ('anthropic', 'claude'):
+                note = " (via proxy)"
+            elif provider in ('google', 'gemini'):
+                note = " (via proxy)"
+        f.write(f"| {name} | {agent_id} | {provider}{note} | {model} | active |\n")
 PYEOF
 
 info "AGENT_ROSTER.md written to vault"

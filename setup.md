@@ -35,14 +35,17 @@ This runbook bootstraps a complete Hermes multi-agent system from a fresh Linux 
 - Linux (Debian/Ubuntu/Fedora/Arch) or macOS
 - Internet connection
 - 1 GB free disk space
-- At least one LLM API key (Anthropic, Google, Kimi, OpenRouter, or Ollama)
+- At least one LLM provider:
+  - **API keys** for Anthropic, Google, Kimi, OpenRouter, or Ollama; OR
+  - **CLI subscriptions** (Claude Max, Gemini Advanced) for proxy mode
 - `curl`, `bash`, and standard POSIX utilities
+- Node.js + npm (only for CLI proxy mode)
 
 ### What You Need to Know
 
 - Your timezone (IANA format, e.g. `America/New_York`)
 - Which agents you want (minimum: orchestrator + coder)
-- Which LLM providers you have API keys for
+- Which LLM providers you have API keys for (or CLI subscriptions for proxy mode)
 - Whether you want Telegram delivery or local-only
 
 ### Quick Start (One-Liner)
@@ -194,13 +197,15 @@ test -f "$VAULT_PATH/brain/Memories.md"
 
 ### Step 5 — Choose & Wire Sub-Agents + Providers
 
-**Purpose:** Enable only the agents the user chose; write `.env` with selected API keys.
+**Purpose:** Enable only the agents the user chose; write `.env` with provider configuration.
 
-**User Input:** Which agents to enable; API keys (already collected in interview).
+**User Input:** Which agents to enable; provider mode and credentials (already collected in interview).
 
 **What Happens:**
 1. Read `agents.enabled` and `providers` from `setup_answers.yaml`
-2. Create `.env` from `.env.example`, filling in actual API keys
+2. Create `.env` from `.env.example`
+   - **API-keys mode:** fill in actual API keys
+   - **CLI-proxy mode:** configure `PROXY_MODE=true` and proxy URLs/ports
 3. Set `.env` permissions: `chmod 600 .env`
 4. Auto-add `.env` to `.gitignore` if not present
 5. Write `AGENT_ROSTER.md` in vault with chosen bindings
@@ -212,8 +217,10 @@ test -f "$VAULT_PATH/brain/Memories.md"
 ```bash
 stat -c '%a' .env | grep "600"
 grep -q ".env" .gitignore
-# Each enabled provider has a non-empty key
+# API-keys mode: each enabled provider has a non-empty key
 grep -q "ANTHROPIC_API_KEY=sk-" .env  # if orchestrator enabled
+# Proxy mode: PROXY_MODE is true
+grep -q "PROXY_MODE=true" .env
 ```
 
 ---
@@ -318,13 +325,15 @@ python3 bootstrap/lib/mock-orchestrator.py "$VAULT_PATH"
 **User Input:** None.
 
 **What Happens:**
-1. For each enabled provider: call the `models` list endpoint, verify HTTP 200
-2. Validate vault `brain/hot.md` frontmatter is valid YAML
-3. Verify `~/.hermes/` permissions are `700`
-4. Verify `.env` permissions are `600`
-5. If delivery enabled: ping the bot API
-6. Write `smoke-test-report.json`
-7. Update `hermes-setup.state` → `STEP=10`
+1. **API-keys mode:** For each enabled provider, call the `models` list endpoint, verify HTTP 200
+2. **Proxy mode:** Check local proxy health endpoints and verify a chat completion round-trip
+3. If proxy mode: verify `llm-cli-proxy`, `claude`, and/or `gemini` CLI binaries are installed
+4. Validate vault `brain/hot.md` frontmatter is valid YAML
+5. Verify `~/.hermes/` permissions are `700`
+6. Verify `.env` permissions are `600`
+7. If delivery enabled: ping the bot API
+8. Write `smoke-test-report.json`
+9. Update `hermes-setup.state` → `STEP=10`
 
 **Artifacts:** `smoke-test-report.json`
 
@@ -345,6 +354,15 @@ Use `--headless` mode. The vault works perfectly as plain Markdown without Obsid
 
 ### "API key rejected"
 Check `smoke-test-report.json` for the specific provider failure. Common causes: expired key, wrong key format, provider outage.
+
+### "Proxy not responding" (CLI proxy mode)
+1. Verify proxies are running: `screen -ls` should show `proxy-claude` and/or `proxy-gemini`
+2. Start proxies manually: `./scripts/start-proxies.sh`
+3. Check proxy logs: `screen -r proxy-claude`
+4. Ensure `claude` or `gemini` CLI is installed and authenticated:
+   - `claude --version` should work
+   - `gemini --version` should work
+5. Common cause: CLI not authenticated. Run `claude login` or `gemini login` first.
 
 ### "I want to redo the interview"
 Run `scripts/reverse-interview.py` to generate a new `setup_answers.yaml` from your current vault, then re-run `bootstrap/30-vault-seed.sh` and onward.

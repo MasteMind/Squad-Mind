@@ -48,9 +48,26 @@ Note: This is ephemeral app data, not the vault.
 
 ---
 
-### 3. Sub-agents
+### 3. Provider Mode
 
-**Q6. Which agents do you want to enable?** (check all that apply)  
+**Q6. How do you want to connect to LLM providers?**  
+Default: `api-keys`
+
+| Option | Description | Requirements |
+|--------|-------------|--------------|
+| `api-keys` | Direct API calls to Anthropic, Google, etc. | API keys for each provider |
+| `cli-proxy` | Route through Claude Code / Gemini CLI via local proxy | Claude Max or Gemini Advanced subscription; `llm-cli-proxy` npm package |
+
+**Important:** `cli-proxy` mode lets you use your existing CLI subscriptions instead of paying for API credits. The proxy runs locally and translates OpenAI-compatible requests to the native CLI.
+
+Maps to: `providers.mode`  
+Used in: `.env`, `bootstrap/40-agents-wire.sh`, smoke test
+
+---
+
+### 4. Sub-agents
+
+**Q7. Which agents do you want to enable?** (check all that apply)  
 Default: `[orchestrator, coder]`
 
 | Agent | Role | Default Provider | Purpose |
@@ -69,9 +86,10 @@ Used in: `AGENT_ROSTER.md`, `.env`, delivery config
 
 ---
 
-### 4. Providers
+### 5. Providers
 
-**Q7. Which LLM API keys do you have?** (check all that apply)  
+**Q8. Which LLM API keys do you have?** (check all that apply)  
+*Only asked if provider mode is `api-keys`.*  
 Default: (none)
 
 | Provider | Key Env Var | Best For |
@@ -87,11 +105,24 @@ For each selected provider, securely prompt for the API key (do not echo to term
 Maps to: `providers.*.api_key`  
 Used in: `.env`
 
+**Q8-alt. Which CLI subscriptions do you have?** (check all that apply)  
+*Only asked if provider mode is `cli-proxy`.*  
+Default: (none)
+
+| Provider | CLI Command | Proxy Port | Best For |
+|----------|-------------|------------|----------|
+| ☐ Claude Max | `claude` | 3456 | Orchestrator, general reasoning |
+| ☐ Gemini Advanced | `gemini` | 3457 | Research, financial, health agents |
+
+*Note: Each additional Gemini agent gets its own port (3458, 3459, etc.) for isolation.*  
+Maps to: `providers.cli_proxy.enabled`  
+Used in: `.env`, proxy startup scripts
+
 ---
 
-### 5. Delivery
+### 6. Delivery
 
-**Q8. Which delivery platforms do you want?**  
+**Q9. Which delivery platforms do you want?**  
 Default: `local-only`
 
 | Option | Description |
@@ -107,33 +138,33 @@ Used in: `~/.hermes/profiles/`, `.env`
 
 ---
 
-### 6. Starter Projects
+### 7. Starter Projects
 
-**Q9. Enable Health Management project?**  
+**Q10. Enable Health Management project?**  
 Default: `yes`  
 Maps to: `projects.health`  
 Includes: member registry, insurance tracker, vaccination schedule, checkup log, medication inventory
 
-**Q10. Enable Finance Management project?**  
+**Q11. Enable Finance Management project?**  
 Default: `yes`  
 Maps to: `projects.finance`  
 Includes: net worth tracker, monthly budget, investments, tax planning, insurance, action plan
 
 ---
 
-### 7. Locale
+### 8. Locale
 
-**Q11. Currency symbol?** (e.g. `$`, `€`, `£`, `¥`)  
+**Q12. Currency symbol?** (e.g. `$`, `€`, `£`, `¥`)  
 Default: `$`  
 Maps to: `locale.currency_symbol`  
 Used in: finance templates
 
-**Q12. Country / tax regime?** (e.g. `US`, `UK`, `DE`, `Generic`)  
+**Q13. Country / tax regime?** (e.g. `US`, `UK`, `DE`, `Generic`)  
 Default: `Generic`  
 Maps to: `locale.country_code`  
 Used in: tax-planning stub
 
-**Q13. Household mode?**  
+**Q14. Household mode?**  
 Default: `single`
 
 | Option | Description |
@@ -146,9 +177,9 @@ Used in: health member registry template
 
 ---
 
-### 8. Installation Mode
+### 9. Installation Mode
 
-**Q14. Install Obsidian GUI? Or run headless (server)?**  
+**Q15. Install Obsidian GUI? Or run headless (server)?**  
 Default: `gui`
 
 | Option | Description |
@@ -161,9 +192,9 @@ Note: Headless mode is recommended for servers, WSL, or CI.
 
 ---
 
-### 9. Auto-Start
+### 10. Auto-Start
 
-**Q15. How should agents start on boot?**  
+**Q16. How should agents start on boot?**  
 Default: `manual`
 
 | Option | Description |
@@ -189,6 +220,21 @@ user:
 paths:
   vault: "/home/alex/Documents/Home-Brain"
   hermes_home: "/home/alex/.hermes"
+providers:
+  mode: "api-keys"          # or "cli-proxy"
+  anthropic:
+    api_key: "sk-ant-..."   # only in api-keys mode
+  google:
+    api_key: "AIza..."      # only in api-keys mode
+  kimi:
+    api_key: "..."          # only in api-keys mode
+  cli_proxy:
+    enabled:
+      - claude               # only in cli-proxy mode
+      - gemini               # only in cli-proxy mode
+    ports:
+      claude: 3456
+      gemini: 3457
 agents:
   enabled:
     - orchestrator
@@ -202,11 +248,6 @@ agents:
       name: "Hephaestus"
       provider: "kimi"
       model: "kimi-for-coding"
-providers:
-  anthropic:
-    api_key: "sk-ant-..."
-  kimi:
-    api_key: "..."
 delivery:
   platform: "local-only"
   telegram:
@@ -235,5 +276,7 @@ Before proceeding to bootstrap:
 - [ ] `paths.vault` is an absolute path
 - [ ] `paths.hermes_home` is an absolute path
 - [ ] `agents.enabled` contains at least `orchestrator`
-- [ ] For each enabled agent, the required provider's `api_key` is non-empty
+- [ ] `providers.mode` is one of: `api-keys`, `cli-proxy`
+- [ ] If `api-keys` mode: each enabled agent's required provider has a non-empty `api_key`
+- [ ] If `cli-proxy` mode: `providers.cli_proxy.enabled` is non-empty
 - [ ] `install.mode` is one of: `gui`, `headless`
