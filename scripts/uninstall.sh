@@ -65,7 +65,7 @@ fi
 if command -v systemctl &>/dev/null; then
     systemctl --user stop hermes-orchestrator 2>/dev/null || true
     systemctl --user disable hermes-orchestrator 2>/dev/null || true
-    rm -f "$HOME/.config/systemd/user/hermes-*.service"
+    find "$HOME/.config/systemd/user" -maxdepth 1 -name 'hermes-*.service' -delete
     systemctl --user daemon-reload 2>/dev/null || true
     echo "Removed systemd user services"
 fi
@@ -79,6 +79,10 @@ fi
 # Purge vault
 if [[ "$PURGE" == true ]]; then
     if [[ -n "$VAULT_PATH" && -d "$VAULT_PATH" ]]; then
+        echo "Creating backup before purge..."
+        if [[ -x "$SCRIPT_DIR/backup-vault.sh" ]]; then
+            "$SCRIPT_DIR/backup-vault.sh" "$VAULT_PATH" || echo "Warning: Backup failed, proceeding with purge"
+        fi
         rm -rf "$VAULT_PATH"
         echo "Removed vault at $VAULT_PATH"
     else

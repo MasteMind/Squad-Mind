@@ -65,6 +65,10 @@ Or run stage by stage (recommended for first time):
 ./bootstrap/30-vault-seed.sh
 ./bootstrap/40-agents-wire.sh
 ./bootstrap/50-smoke-test.sh
+./bootstrap/60-delivery.sh
+./bootstrap/70-autostart.sh
+./bootstrap/80-starter-projects.sh
+./bootstrap/90-first-run.sh
 ```
 
 ---
@@ -178,9 +182,7 @@ ls -ld ~/.hermes | awk '{print $1}' | grep "drwx------"
 1. Read `paths.vault` from `setup_answers.yaml`
 2. Copy `templates/vault/` recursively to `$VAULT_PATH`
 3. Interpolate variables: `${USER_NAME}`, `${USER_EMAIL}`, `${TIMEZONE}`, `${CURRENCY_SYMBOL}`, `${COUNTRY_CODE}`, `${HOUSEHOLD_MODE}`
-4. If `projects.health=true`: copy `templates/projects/health/` → `$VAULT_PATH/projects/health/`
-5. If `projects.finance=true`: copy `templates/projects/finance/` → `$VAULT_PATH/projects/finance/`
-6. Update `hermes-setup.state` → `STEP=4`
+4. Update `hermes-setup.state` → `STEP=4`
 
 **Artifacts:** Fully populated vault.
 
@@ -206,10 +208,21 @@ test -f "$VAULT_PATH/brain/Memories.md"
 2. Create `.env` from `.env.example`
    - **API-keys mode:** fill in actual API keys
    - **CLI-proxy mode:** configure `PROXY_MODE=true` and proxy URLs/ports
+   - **Mixed mode:** write BOTH API keys AND proxy URLs if both are configured
 3. Set `.env` permissions: `chmod 600 .env`
 4. Auto-add `.env` to `.gitignore` if not present
 5. Write `AGENT_ROSTER.md` in vault with chosen bindings
 6. Update `hermes-setup.state` → `STEP=5`
+
+**Mixed Mode Example:**
+```yaml
+agents:
+  roster:
+    orchestrator:
+      provider: anthropic   # uses Claude proxy
+    coder:
+      provider: kimi        # uses Kimi API key directly
+```
 
 **Artifacts:** `.env` (600), `AGENT_ROSTER.md`
 
