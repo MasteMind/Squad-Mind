@@ -60,7 +60,12 @@ Default: `api-keys`
 
 **Important:** `cli-proxy` mode lets you use your existing CLI subscriptions instead of paying for API credits. The proxy runs locally and translates OpenAI-compatible requests to the native CLI.
 
-Maps to: `providers.mode`  
+**Mixed mode:** You can configure both API keys AND CLI proxies in the same setup. The kit writes all credentials to `.env`, and each agent can use whichever connection you prefer. For example:
+- Hermes (orchestrator) via Claude proxy
+- Hephaestus (coder) via Kimi API key
+- Clio (researcher) via Gemini proxy
+
+Maps to: `providers.mode` (global default)  
 Used in: `.env`, `bootstrap/40-agents-wire.sh`, smoke test
 
 ---

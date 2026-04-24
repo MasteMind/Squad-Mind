@@ -23,6 +23,18 @@ HOUSEHOLD_MODE=$(read_yaml_key setup_answers.yaml "locale.household_mode" || ech
 info "Vault path: $VAULT_PATH"
 
 # ------------------------------------------------------------------
+# Backup existing vault before overwriting
+# ------------------------------------------------------------------
+if [[ -d "$VAULT_PATH/brain" ]]; then
+    info "Existing vault detected. Creating backup..."
+    if [[ -x "scripts/backup-vault.sh" ]]; then
+        ./scripts/backup-vault.sh "$VAULT_PATH" || warn "Backup script failed, proceeding anyway"
+    else
+        warn "backup-vault.sh not found. Skipping pre-seed backup."
+    fi
+fi
+
+# ------------------------------------------------------------------
 # Copy vault templates
 # ------------------------------------------------------------------
 mkdir -p "$VAULT_PATH"
@@ -37,8 +49,8 @@ fi
 # ------------------------------------------------------------------
 info "Interpolating template variables..."
 
-find "$VAULT_PATH" -type f -name "*.md" -o -name "*.yaml" -o -name "*.yml" | while read -r file; do
-    sed -i \
+find "$VAULT_PATH" -type f \( -name "*.md" -o -name "*.yaml" -o -name "*.yml" \) | while read -r file; do
+    sed_inplace \
         -e "s|\\\${USER_NAME}|$USER_NAME|g" \
         -e "s|\\\${USER_EMAIL}|$USER_EMAIL|g" \
         -e "s|\\\${TIMEZONE}|$TIMEZONE|g" \

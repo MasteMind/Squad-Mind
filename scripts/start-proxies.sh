@@ -54,7 +54,7 @@ for provider in enabled:
     port = ports.get(provider, port_defaults.get(provider, 3456))
     session_name = f"proxy-{provider}"
 
-    # Check if already running
+    # Check if already running in screen
     result = subprocess.run(
         ['screen', '-ls'],
         capture_output=True, text=True
@@ -63,7 +63,16 @@ for provider in enabled:
         print(f"[{provider}] Screen session '{session_name}' already exists. Skipping.")
         continue
 
-    cmd = f"llm-cli-proxy --provider {provider} --port {port} --workspace {workspace}"
+    # Check for port conflicts
+    port_check = subprocess.run(
+        ['ss', '-tlnp'],
+        capture_output=True, text=True
+    )
+    if f":{port} " in port_check.stdout:
+        print(f"[{provider}] WARNING: Port {port} is already in use. Skipping.")
+        continue
+
+    cmd = f"llm-cli-proxy --provider {provider} --port {port} --host 127.0.0.1 --workspace {workspace}"
     screen_cmd = ['screen', '-dmS', session_name, 'bash', '-c', cmd]
 
     print(f"[{provider}] Starting proxy on port {port}...")

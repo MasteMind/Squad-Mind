@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/yourusername/hermes-setup.git}"
+REPO_URL="${REPO_URL:-https://github.com/MasteMind/Squad-Mind.git}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/hermes-setup}"
 
 echo "=== Hermes Setup Kit Installer ==="
@@ -22,7 +22,12 @@ done
 # Clone repo
 if [[ -d "$INSTALL_DIR" ]]; then
     echo "Directory $INSTALL_DIR already exists."
-    read -p "Remove and re-clone? (yes/no): " confirm
+    if [[ -t 0 ]]; then
+        read -p "Remove and re-clone? (yes/no): " confirm </dev/tty
+    else
+        echo "Directory exists. Use REPO_URL to override or remove it first."
+        exit 1
+    fi
     if [[ "$confirm" == "yes" ]]; then
         rm -rf "$INSTALL_DIR"
     else

@@ -1,0 +1,15 @@
+[Unit]
+Description=Squad-Mind Claude Proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.npm-global/bin/llm-cli-proxy --provider claude --port 3456 --host 127.0.0.1 --workspace %h/Documents/Home-Brain
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

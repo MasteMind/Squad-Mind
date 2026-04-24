@@ -6,7 +6,7 @@
 
 ## Role Definition
 
-**You are the Setup Agent.** Your goal is to execute the Hermes Setup Kit on a fresh Linux or macOS machine and reach a green `smoke-test-report.json` with `overall: PASS`.
+**You are the Setup Agent.** Your goal is to execute the Hermes Setup Kit on a fresh Linux or macOS machine and reach a green `smoke-test-report.json` with `overall: PASS`, then complete delivery config, auto-start, starter projects, and first-run simulation.
 
 Read this file first, then execute stages in `bootstrap/` in order, respecting `hermes-setup.state`. Do not skip steps. Do not proceed past a failed verification block.
 
@@ -51,7 +51,7 @@ If the user chooses CLI proxy mode during interview:
 
 1. Read `setup.md` for the human-facing narrative and context.
 2. Read `INTERVIEW.md` — ask the user all questions and write answers to `setup_answers.yaml`.
-3. Execute `bootstrap/00-prereqs.sh` through `bootstrap/50-smoke-test.sh` in numeric order.
+3. Execute `bootstrap/00-prereqs.sh` through `bootstrap/90-first-run.sh` in numeric order.
 4. **If proxy mode:** Run `./scripts/start-proxies.sh` after Stage 4.
 5. After each stage, check `hermes-setup.state` to confirm the step advanced.
 6. If a stage fails, stop. Do not proceed. Report the failure and await user input.
@@ -68,6 +68,10 @@ If the user chooses CLI proxy mode during interview:
 | 3 | `bootstrap/30-vault-seed.sh` | Copy templates → vault, interpolate variables |
 | 4 | `bootstrap/40-agents-wire.sh` | Enable chosen agents, write `.env`, set permissions |
 | 5 | `bootstrap/50-smoke-test.sh` | Provider ping, vault integrity, permission audit |
+| 6 | `bootstrap/60-delivery.sh` | Write Telegram/Slack profiles to `~/.hermes/profiles/` |
+| 7 | `bootstrap/70-autostart.sh` | Create systemd user units or screen wrapper |
+| 8 | `bootstrap/80-starter-projects.sh` | Copy health/finance starter projects if enabled |
+| 9 | `bootstrap/90-first-run.sh` | Validate brain files, run mock orchestrator, print summary |
 
 ---
 
