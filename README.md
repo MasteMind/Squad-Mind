@@ -14,7 +14,7 @@ Originally built for the Hermes multi-agent system, Squad-Mind is fully generali
 - **Teams** who need structured agent workflows with shared knowledge
 - **Builders** who want to prototype multi-agent setups without boilerplate
 - **Individuals** who want to automate their life — health tracking, financial planning, learning, and daily productivity — with agents that actually remember context
-- Anyone with at least one LLM API key who believes AI works better in teams
+- Anyone with at least one LLM API key (or CLI subscription) who believes AI works better in teams
 
 ## Personal Use: Your Life, Automated
 
@@ -42,6 +42,10 @@ cd Squad-Mind
 ./bootstrap/30-vault-seed.sh
 ./bootstrap/40-agents-wire.sh
 ./bootstrap/50-smoke-test.sh
+./bootstrap/60-delivery.sh
+./bootstrap/70-autostart.sh
+./bootstrap/80-starter-projects.sh
+./bootstrap/90-first-run.sh
 ```
 
 ### Option B: Docker Fast-Path (isolated, zero-config)
@@ -54,16 +58,29 @@ docker-compose -f docker-compose.bootstrap.yml up
 
 1. **Obsidian** (optional — skipped with `--headless` for servers)
 2. **Home-Brain vault** — structured Markdown knowledge base at your chosen path
-3. **Agent runtime** (`~/.hermes`) — agent profiles, bot configs, scripts
-4. **Sub-agents** — wired to your chosen LLM providers
+3. **Agent runtime** (`~/.hermes`) — agent profiles, bot configs, scripts, backups
+4. **Sub-agents** — wired to your chosen LLM providers (API keys or CLI proxies)
 5. **Starter projects** — Health Management and Finance Management templates
+6. **Auto-start** — systemd user units or screen wrappers (optional)
+
+## Provider Modes
+
+| Mode | Best For |
+|------|---------|
+| **API Keys** | Users with API credits, no CLI subscriptions |
+| **CLI Proxy** | Users with Claude Max or Gemini Advanced subscriptions |
+| **Mixed** | One agent via proxy, another via API key — whatever works for you |
+
+The kit writes all configured credentials to `.env` and each agent uses the connection you choose.
 
 ## Minimum Requirements
 
 - Linux or macOS
 - Internet connection
 - 1 GB free disk space
-- At least one LLM API key
+- At least one LLM provider:
+  - API key (Anthropic, Google, Kimi, OpenRouter, OpenAI, Ollama), OR
+  - CLI subscription (Claude Max, Gemini Advanced)
 
 ## Interview-Driven Setup
 
@@ -76,9 +93,11 @@ Squad-Mind/
 ├── AGENTS.md              # "README for agents" — machine-readable execution guide
 ├── setup.md               # Human-readable runbook
 ├── INTERVIEW.md           # Scripted Q&A for setup personalization
-├── bootstrap/             # Stage scripts (00-50)
-├── templates/             # Vault + runtime skeletons
-├── scripts/               # Utilities (uninstall, rotate-keys, reverse-interview)
+├── bootstrap/             # Stage scripts (00-90)
+├── templates/             # Vault + runtime skeletons + systemd units
+├── scripts/               # Utilities (uninstall, rotate-keys, reverse-interview, backup, health-check)
+├── tests/                 # Integration & crash-recovery tests
+├── .github/workflows/     # CI (Docker-based integration tests + ShellCheck)
 └── docker-compose.bootstrap.yml  # Optional Docker fast-path
 ```
 
@@ -87,13 +106,30 @@ Squad-Mind/
 - `.env` is created with `chmod 600` and auto-added to `.gitignore`
 - API keys are never committed
 - `~/.hermes` is created with `drwx------` permissions
+- CLI proxies bind to `127.0.0.1` only (never `0.0.0.0`)
 - Use `scripts/rotate-keys.py` to safely rotate credentials
+- Use `scripts/backup-vault.sh` before destructive operations
 
-## Uninstall
+## Utilities
 
 ```bash
-./scripts/uninstall.sh        # Removes runtime, preserves vault
-./scripts/uninstall.sh --purge  # Removes runtime + vault
+./scripts/backup-vault.sh           # Backup vault to ~/.hermes/backups/
+./scripts/restore-vault.sh          # Restore from a backup
+./scripts/health-check.sh           # Verify entire stack is healthy
+./scripts/rotate-keys.py            # Rotate API keys safely
+./scripts/reverse-interview.py      # Regenerate interview from current vault
+./scripts/uninstall.sh              # Remove runtime, preserve vault
+./scripts/uninstall.sh --purge      # Remove runtime + vault
+```
+
+## Testing
+
+```bash
+# Full integration test in a clean Debian container
+./tests/bootstrap-integration.sh
+
+# Crash-recovery / idempotency test
+./tests/crash-recovery.sh
 ```
 
 ## License
