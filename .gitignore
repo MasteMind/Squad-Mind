@@ -33,7 +33,3 @@ venv/
 # Promotion / marketing materials (not for public repo)
 PROMOTION_*.md
 LINKEDIN_POST_*.md
-
-# llm-cli-proxy is vendored as a git submodule (see A7 / patches/);
-# until the submodule conversion lands, the local clone stays untracked.
-tools/llm-cli-proxy/

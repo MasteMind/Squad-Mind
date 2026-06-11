@@ -30,6 +30,33 @@ if [[ -d "templates/runtime/hermes/scripts" ]]; then
 fi
 
 # ------------------------------------------------------------------
+# Build llm-cli-proxy from the vendored submodule (cli-proxy modes)
+# ------------------------------------------------------------------
+# The tools/llm-cli-proxy submodule (fork pinned to squad-mind, see
+# patches/) is built locally and exposed via the llm-cli-proxy-link
+# symlink that stage 70's PROXY_DIST default resolves through. If the
+# submodule isn't checked out, fall back to the documented global
+# install (npm install -g llm-cli-proxy).
+PROVIDER_MODE=$(read_yaml_key setup_answers.yaml "providers.mode" || echo "cli-proxy")
+PROXY_SRC="tools/llm-cli-proxy"
+
+if [[ "$PROVIDER_MODE" == "cli-proxy" || "$PROVIDER_MODE" == "mixed" ]]; then
+    if [[ -f "$PROXY_SRC/package.json" ]]; then
+        info "Building llm-cli-proxy from submodule ($PROXY_SRC)..."
+        (cd "$PROXY_SRC" && npm ci && npm run build)
+        ln -sfn "$(cd "$PROXY_SRC" && pwd)" "$HERMES_HOME/llm-cli-proxy-link"
+        PROXY_DIST="$HERMES_HOME/llm-cli-proxy-link/dist/index.js"
+        export PROXY_DIST
+        info "Proxy built: PROXY_DIST=$PROXY_DIST"
+    elif command -v llm-cli-proxy >/dev/null 2>&1; then
+        info "Submodule not checked out; using global llm-cli-proxy: $(command -v llm-cli-proxy)"
+    else
+        info "Submodule not checked out — falling back to: npm install -g llm-cli-proxy"
+        npm install -g llm-cli-proxy
+    fi
+fi
+
+# ------------------------------------------------------------------
 # Deep-merge kit-owned config overlay into config.yaml
 # ------------------------------------------------------------------
 # Hermes model/port: setup_answers agents table wins, models.lock.yaml is

@@ -1,0 +1,41 @@
+From 434387e0480c610344c46c6ddecdad8fa27d0c9e Mon Sep 17 00:00:00 2001
+From: Ramiz Mehran <ramiz.mehran@meesho.com>
+Date: Fri, 22 May 2026 10:45:32 +0530
+Subject: [PATCH 2/2] refactor: isolate ollama env injection to talariaProvider
+
+---
+ src/providers/claude.ts  | 4 ----
+ src/providers/talaria.ts | 4 ++++
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/providers/claude.ts b/src/providers/claude.ts
+index ac7291d..5500b2b 100644
+--- a/src/providers/claude.ts
++++ b/src/providers/claude.ts
+@@ -25,10 +25,6 @@ export const claudeProvider: ProviderConfig = {
+   mode: 'per-request',
+   emitsInit: false,
+   usesStdinPipe: true,
+-  env: process.env.ANTHROPIC_BASE_URL ? {
+-    ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+-    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
+-  } : undefined,
+ 
+   buildSpawnArgs(resumeSessionId: string): string[] {
+     const args = [
+diff --git a/src/providers/talaria.ts b/src/providers/talaria.ts
+index 07ace05..2a0aa10 100644
+--- a/src/providers/talaria.ts
++++ b/src/providers/talaria.ts
+@@ -6,4 +6,8 @@ export const talariaProvider: ProviderConfig = {
+   displayName: 'Talaria (Ollama)',
+   defaultModel: 'qwen3.5:9b-q4_K_M',
+   models: ['qwen3.5:9b-q4_K_M'],
++  env: {
++    ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL || 'http://localhost:11434/v1',
++    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || 'ollama',
++  },
+ };
+-- 
+2.50.1 (Apple Git-155)
+

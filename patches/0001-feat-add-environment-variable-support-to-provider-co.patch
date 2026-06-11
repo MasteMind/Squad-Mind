@@ -1,0 +1,112 @@
+From 0adbceeba5255ca5d6506cb24dea94624611dfd2 Mon Sep 17 00:00:00 2001
+From: Ramiz Mehran <ramiz.mehran@meesho.com>
+Date: Fri, 22 May 2026 10:40:00 +0530
+Subject: [PATCH 1/2] feat: add environment variable support to provider
+ configuration
+
+---
+ src/providers/base.ts    |  3 +++
+ src/providers/claude.ts  |  4 ++++
+ src/providers/ollama.ts  | 21 +++++++++++++++++++++
+ src/providers/talaria.ts |  9 +++++++++
+ src/session-manager.ts   |  4 ++--
+ 5 files changed, 39 insertions(+), 2 deletions(-)
+ create mode 100644 src/providers/ollama.ts
+ create mode 100644 src/providers/talaria.ts
+
+diff --git a/src/providers/base.ts b/src/providers/base.ts
+index a2ffeae..21a521e 100644
+--- a/src/providers/base.ts
++++ b/src/providers/base.ts
+@@ -38,6 +38,9 @@ export interface ProviderConfig {
+    */
+   usesStdinPipe: boolean;
+ 
++  /** Optional environment variables to set when spawning the process */
++  env?: Record<string, string>;
++
+   /**
+    * Build spawn args for a request.
+    * @param resumeSessionId - Session ID to resume from (empty on first request)
+diff --git a/src/providers/claude.ts b/src/providers/claude.ts
+index 5500b2b..ac7291d 100644
+--- a/src/providers/claude.ts
++++ b/src/providers/claude.ts
+@@ -25,6 +25,10 @@ export const claudeProvider: ProviderConfig = {
+   mode: 'per-request',
+   emitsInit: false,
+   usesStdinPipe: true,
++  env: process.env.ANTHROPIC_BASE_URL ? {
++    ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
++    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
++  } : undefined,
+ 
+   buildSpawnArgs(resumeSessionId: string): string[] {
+     const args = [
+diff --git a/src/providers/ollama.ts b/src/providers/ollama.ts
+new file mode 100644
+index 0000000..80c8749
+--- /dev/null
++++ b/src/providers/ollama.ts
+@@ -0,0 +1,21 @@
++import type { NdjsonEvent, NormalizedEventType } from '../types.js';
++import type { ProviderConfig } from './base.js';
++
++export const ollamaProvider: ProviderConfig = {
++  binary: 'curl', // We'll wrap the call to ollama's API
++  displayName: 'Ollama Proxy',
++  defaultModel: 'qwen3.5:9b-q4_K_M',
++  models: ['qwen3.5:9b-q4_K_M'],
++  mode: 'per-request',
++  emitsInit: false,
++  usesStdinPipe: false,
++
++  buildSpawnArgs(resumeSessionId: string): string[] {
++    // This provider will actually use fetch/curl to hit the local Ollama API
++    return [];
++  },
++
++  buildStdinMessage(content: string): string { return content; },
++  normalizeEventType(rawType: string): NormalizedEventType { return 'text_delta'; },
++  extractTextContent(event: NdjsonEvent): string { return ''; },
++};
+diff --git a/src/providers/talaria.ts b/src/providers/talaria.ts
+new file mode 100644
+index 0000000..07ace05
+--- /dev/null
++++ b/src/providers/talaria.ts
+@@ -0,0 +1,9 @@
++import { claudeProvider } from './claude.js';
++import type { ProviderConfig } from './base.js';
++
++export const talariaProvider: ProviderConfig = {
++  ...claudeProvider,
++  displayName: 'Talaria (Ollama)',
++  defaultModel: 'qwen3.5:9b-q4_K_M',
++  models: ['qwen3.5:9b-q4_K_M'],
++};
+diff --git a/src/session-manager.ts b/src/session-manager.ts
+index c7e25d5..49159f0 100644
+--- a/src/session-manager.ts
++++ b/src/session-manager.ts
+@@ -85,7 +85,7 @@ export class SessionManager {
+       cwd: this.workspaceDir,
+       stdio: ['pipe', 'pipe', 'pipe'],
+       shell: true,
+-      env: { ...process.env },
++      env: { ...process.env, ...this.provider.env },
+     });
+ 
+     this.readline = createInterface({
+@@ -376,7 +376,7 @@ export class SessionManager {
+         cwd: this.workspaceDir,
+         stdio: ['pipe', 'pipe', 'pipe'],
+         shell: true,
+-        env: { ...process.env },
++        env: { ...process.env, ...this.provider.env },
+       });
+ 
+       const rl = createInterface({ input: proc.stdout!, crlfDelay: Infinity });
+-- 
+2.50.1 (Apple Git-155)
+
