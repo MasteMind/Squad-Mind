@@ -1,0 +1,83 @@
+# Squad-Mind Slack app manifest (config-only).
+#
+# How to use:
+#   1. Open https://api.slack.com/apps -> "Create New App" -> "From an app manifest".
+#   2. Pick your workspace, paste this file (YAML tab), create the app.
+#   3. Install the app to the workspace (OAuth & Permissions -> Install).
+#   4. Copy the Bot User OAuth Token (xoxb-...) and an App-Level Token with
+#      connections:write (xapp-..., Basic Information -> App-Level Tokens)
+#      into /srv/squad/secrets/.env as SLACK_BOT_TOKEN / SLACK_APP_TOKEN
+#      (template: deploy/env/server.env.example).
+#
+# Every scope/event below is verified against the live adapter:
+#   ~/.hermes/hermes-agent/gateway/platforms/slack.py  (cited as slack.py:NN)
+# and the canonical generator `hermes slack manifest`
+#   ~/.hermes/hermes-agent/hermes_cli/slack_cli.py:66-99  (cited as slack_cli.py:NN)
+#
+# Native slash commands beyond /hermes: the adapter registers every gateway
+# command as a native slash, but Slack only delivers slashes declared in the
+# manifest (slack.py:904-908). Regenerate the full list with
+# `hermes slack manifest --slashes-only` and merge it into features.slash_commands.
+
+_metadata:
+  major_version: 1
+  minor_version: 1
+
+display_information:
+  name: Squad-Mind
+  description: Team-of-thoughts AI squad — Hermes orchestrator in your Slack.
+  background_color: "#1a1a2e"
+
+features:
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false # users can DM the bot (slack_cli.py:51-55)
+  bot_user:
+    display_name: squad
+    always_online: true
+  assistant_view:
+    assistant_description: Chat with the squad in threads and DMs. # AI-assistant pane; pairs with assistant_thread_* events (slack.py:888-894)
+  slash_commands:
+    - command: /hermes
+      description: Talk to the squad or run a subcommand # /hermes is the reserved catch-all (commands.py:1060-1062)
+      usage_hint: "[subcommand] [args]"
+      should_escape: false
+      url: https://hermes-agent.local/slack/commands # placeholder; Socket Mode ignores it (commands.py:1098-1103)
+
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read # app.event("app_mention") handler (slack.py:869)
+      - assistant:write # assistant_threads_setStatus (slack.py:1207, 1222, 1240)
+      - channels:history # message events in public channels (slack.py:858)
+      - channels:read # conversations_info / conversations_replies (slack.py:1957, 3148)
+      - chat:write # chat_postMessage everywhere (slack.py:1002, 1107, 2751)
+      - commands # slash command dispatch via app.command (slack.py:920)
+      - files:read # files_info + url_private_download attachment fetch (slack.py:2428, 2461)
+      - files:write # files_upload_v2 for outbound files/images (slack.py:1319, 1446, 1780)
+      - groups:history # message events in private channels (slack.py:858)
+      - groups:read # conversations_info on private channels (slack.py:1957)
+      - im:history # message.im DM events (slack.py:858)
+      - im:read # conversations_info on DMs (slack.py:1957)
+      - im:write # open/reply in DMs (slack_cli.py:79; DM send path slack.py:1002)
+      - reactions:write # eyes/check/x reaction lifecycle, degrades gracefully if missing (slack.py:1622, 1636)
+      - users:read # users_info display-name resolution (slack.py:1692)
+
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention # explicit @mention handler (slack.py:869)
+      - assistant_thread_context_changed # assistant lifecycle (slack.py:892)
+      - assistant_thread_started # assistant lifecycle (slack.py:888)
+      - file_change # no-op ack to silence unhandled-event warnings (slack.py:884)
+      - file_created # no-op ack (slack.py:880)
+      - file_shared # no-op ack (slack.py:876)
+      - message.channels # generic message handler, mention-gated via SLACK_REQUIRE_MENTION (slack.py:858, 3565)
+      - message.groups # private-channel messages (slack.py:858)
+      - message.im # DMs (slack.py:858)
+  interactivity:
+    is_enabled: true # Block Kit approval + slash-confirm buttons (slack.py:929-945)
+  org_deploy_enabled: false
+  socket_mode_enabled: true # AsyncSocketModeHandler + SLACK_APP_TOKEN, no public HTTP endpoint (slack.py:379, 738)
+  token_rotation_enabled: false
