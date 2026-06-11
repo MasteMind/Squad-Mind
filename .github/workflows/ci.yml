@@ -41,6 +41,19 @@ jobs:
           chmod +x tests/crash-recovery.sh
           ./tests/crash-recovery.sh
 
+  drift-static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Run static drift checks
+        run: |
+          chmod +x scripts/sync-from-live.sh
+          ./scripts/sync-from-live.sh --ci --format json
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:

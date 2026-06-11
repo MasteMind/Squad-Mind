@@ -1,0 +1,52 @@
+# .syncignore — accepted drift between this machine's live deployment and
+# the Squad-Mind templates. Lines are `group:key` fnmatch patterns; `#`
+# starts a comment. Used by scripts/sync_from_live.py.
+#
+# Every entry below documents INTENTIONAL drift. If you fix the underlying
+# divergence, delete the entry so the tool starts watching it again.
+
+# Live bot YAMLs (clio, hephaestus) are stale relative to models.lock.yaml.
+# Deliberately resolved in favor of the launchd plists (the running truth);
+# the bot YAMLs get corrected on the next bootstrap re-render.
+models:bots.clio.cli
+models:bots.clio.model
+models:bots.hephaestus.cli
+models:bots.hephaestus.model
+
+# Personal model choice on this machine (claude-fable-5) differs from the
+# kit default pinned in models.lock.yaml (claude-opus-4-7).
+config:model.default
+config:custom_providers[0].model
+
+# Personal provider entry predates the kit's canonical claude-cli-proxy name.
+config:custom_providers[0].name
+
+# Live bot YAMLs predate the capitalized agents/<Name>/ vault dirs; the
+# plists and the on-disk vault already use the capitalized form. Fixed on
+# the next re-render — not a template bug.
+bots:*.persona
+
+# Talaria runs as a hermes gateway profile on this machine and predates the
+# kit's talaria bot YAML; the template is correct for fresh installs.
+bots:talaria.yaml
+
+# Live governance docs carry a `date:` frontmatter key (run data stamped at
+# seeding time); the distributed templates are date-less by design.
+vault-structure:governance/*:frontmatter
+
+# The P2 heading was deliberately genericized for distribution
+# ("alternative-orchestrator test") while the live doc names the concrete
+# CLI ("Codex-orchestrator test").
+vault-structure:governance/profiles.md:headings
+
+# Live-only Meesho vault content (personal projects, areas, journal, brain
+# scratch notes) was deliberately stripped from the distributed kit, and the
+# live vault predates kit-only seeds (projects/README.md, projects/_template/).
+vault-structure:projects/*
+vault-structure:areas/*
+vault-structure:journal/*
+vault-structure:brain/tmux.md
+
+# Per-agent runtime caches in the live vault (e.g. agents/Clio/cache/) are
+# run data, never part of the kit.
+vault-structure:agents/*/cache/*
