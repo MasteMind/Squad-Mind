@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage 3: Seed Vault from Templates
+# Stage 3: Seed Vault from Templates (team-brain tree)
 set -euo pipefail
 
 source "$(dirname "$0")/lib/common.sh"
@@ -8,17 +8,19 @@ guard_step 3
 
 info "=== Stage 3: Vault Seeding ==="
 
-require_file "setup_answers.yaml"
+require_answers_v2 "setup_answers.yaml"
 
 VAULT_PATH=$(read_yaml_key setup_answers.yaml "paths.vault" || echo "$HOME/Documents/Home-Brain")
 VAULT_PATH="${VAULT_PATH/#\~/$HOME}"
+HERMES_HOME=$(read_yaml_key setup_answers.yaml "paths.hermes_home" || echo "$HOME/.hermes")
+HERMES_HOME="${HERMES_HOME/#\~/$HOME}"
 
 USER_NAME=$(read_yaml_key setup_answers.yaml "user.name" || echo "User")
 USER_EMAIL=$(read_yaml_key setup_answers.yaml "user.email" || echo "")
 TIMEZONE=$(read_yaml_key setup_answers.yaml "user.timezone" || echo "UTC")
-CURRENCY_SYMBOL=$(read_yaml_key setup_answers.yaml "locale.currency_symbol" || echo "$")
-COUNTRY_CODE=$(read_yaml_key setup_answers.yaml "locale.country_code" || echo "Generic")
-HOUSEHOLD_MODE=$(read_yaml_key setup_answers.yaml "locale.household_mode" || echo "single")
+TEAM_NAME=$(read_yaml_key setup_answers.yaml "team.name" || echo "My Team")
+TEAM_DOMAIN_BLURB=$(read_yaml_key setup_answers.yaml "team.domain_blurb" \
+    || echo "<!-- TODO: describe your team's domain, systems, and architecture here -->")
 
 info "Vault path: $VAULT_PATH"
 
@@ -35,38 +37,45 @@ if [[ -d "$VAULT_PATH/brain" ]]; then
 fi
 
 # ------------------------------------------------------------------
-# Copy vault templates
+# Copy vault templates (brain/, agents/, projects/, journal/)
 # ------------------------------------------------------------------
 mkdir -p "$VAULT_PATH"
 
 if [[ -d "templates/vault" ]]; then
     cp -r templates/vault/* "$VAULT_PATH/"
-    info "Copied vault templates"
+    info "Copied vault templates (brain/, agents/, projects/, journal/)"
+else
+    die "templates/vault not found"
 fi
 
 # ------------------------------------------------------------------
 # Interpolate variables
 # ------------------------------------------------------------------
+# Skipped on purpose:
+#   - files containing ROSTER_ROWS (AGENT_ROSTER.md.tmpl — rendered by stage 40)
+#   - projects/_template/ (runtime-filled, uses <fill> markers)
 info "Interpolating template variables..."
 
-find "$VAULT_PATH" -type f \( -name "*.md" -o -name "*.yaml" -o -name "*.yml" \) | while read -r file; do
-    sed_inplace \
-        -e "s|\\\${USER_NAME}|$USER_NAME|g" \
-        -e "s|\\\${USER_EMAIL}|$USER_EMAIL|g" \
-        -e "s|\\\${TIMEZONE}|$TIMEZONE|g" \
-        -e "s|\\\${CURRENCY_SYMBOL}|$CURRENCY_SYMBOL|g" \
-        -e "s|\\\${COUNTRY_CODE}|$COUNTRY_CODE|g" \
-        -e "s|\\\${HOUSEHOLD_MODE}|$HOUSEHOLD_MODE|g" \
-        "$file" 2>/dev/null || true
+find "$VAULT_PATH" -type f -name "*.md" ! -path "*/projects/_template/*" | while read -r file; do
+    if grep -q 'ROSTER_ROWS' "$file"; then
+        continue
+    fi
+    render_template "$file" "$file" \
+        "USER_NAME=$USER_NAME" \
+        "USER_EMAIL=$USER_EMAIL" \
+        "TEAM_NAME=$TEAM_NAME" \
+        "TIMEZONE=$TIMEZONE" \
+        "VAULT_PATH=$VAULT_PATH" \
+        "HERMES_HOME=$HERMES_HOME" \
+        "TEAM_DOMAIN_BLURB=$TEAM_DOMAIN_BLURB"
 done
 
 # ------------------------------------------------------------------
 # Verify no raw placeholders remain
 # ------------------------------------------------------------------
-if grep -r '\${' "$VAULT_PATH" 2>/dev/null; then
-    die "Uninterpolated variables found in vault. Check template files."
-fi
-info "Interpolation check: PASS"
+# (*.tmpl files — i.e. brain/AGENT_ROSTER.md.tmpl — are excluded by the
+# helper; stage 40 renders the roster.)
+verify_no_placeholders "$VAULT_PATH"
 
 set_step 3
 info "=== Stage 3 complete ==="

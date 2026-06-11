@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 reverse-interview.py
-Reads the current vault + .env and emits an updated setup_answers.yaml.
-Useful when you want to regenerate the interview from an edited config.
+Reads the current vault + .env and emits an updated setup_answers.yaml
+(schema 2.0). Useful when you want to regenerate the interview from an
+edited config.
 """
 
 import os
@@ -11,6 +12,8 @@ import yaml
 import sys
 from pathlib import Path
 from datetime import datetime
+
+SQUAD_AGENTS = ('hermes', 'hephaestus', 'clio', 'talaria')
 
 
 def extract_frontmatter(path: str) -> dict:
@@ -27,7 +30,7 @@ def extract_frontmatter(path: str) -> dict:
 
 
 def read_memories(vault_path: str) -> dict:
-    """Parse brain/Memories.md for user info."""
+    """Parse brain/Memories.md for user + team info."""
     memories_path = Path(vault_path) / "brain" / "Memories.md"
     if not memories_path.exists():
         return {}
@@ -48,9 +51,9 @@ def read_memories(vault_path: str) -> dict:
     if m:
         result['timezone'] = m.group(1).strip()
 
-    m = re.search(r'\*\*Household:\*\*\s*(\S+)', text)
+    m = re.search(r'^- Team:\s*(.+)$', text, re.MULTILINE)
     if m:
-        result['household'] = m.group(1).strip()
+        result['team_name'] = m.group(1).strip()
 
     return result
 
@@ -72,32 +75,38 @@ def read_env() -> dict:
     return env
 
 
-def read_roster(vault_path: str) -> tuple:
-    """Read AGENT_ROSTER.md for enabled agents."""
-    roster_path = Path(vault_path) / "AGENT_ROSTER.md"
+def read_roster(vault_path: str) -> dict:
+    """Read brain/AGENT_ROSTER.md (stage-40 output) for per-agent bindings.
+
+    Row shape: | Agent | Role | CLI | Model | Port | Workspace | Status |
+    Returns {agent_id: {cli, model, port}}.
+    """
+    roster_path = Path(vault_path) / "brain" / "AGENT_ROSTER.md"
     if not roster_path.exists():
-        return [], {}
+        return {}
 
     text = roster_path.read_text()
-    enabled = []
     roster = {}
 
     for line in text.splitlines():
-        if '|' in line and 'active' in line:
-            parts = [p.strip() for p in line.split('|')]
-            if len(parts) >= 5 and parts[0] not in ('', 'Agent'):
-                name = parts[1]
-                role = parts[2]
-                provider = parts[3]
-                model = parts[4]
-                enabled.append(role)
-                roster[role] = {
-                    'name': name,
-                    'provider': provider,
-                    'model': model
-                }
+        if '|' not in line or '| active |' not in line:
+            continue
+        parts = [p.strip() for p in line.split('|')]
+        if len(parts) < 8 or parts[1] in ('', 'Agent'):
+            continue
+        name, _role, cli, model, port = parts[1], parts[2], parts[3], parts[4], parts[5]
+        agent_id = name.lower()
+        if agent_id not in SQUAD_AGENTS:
+            continue
+        entry = {'cli': cli, 'model': model}
+        if port and port not in ('—', '-'):
+            try:
+                entry['port'] = int(port)
+            except ValueError:
+                pass
+        roster[agent_id] = entry
 
-    return enabled, roster
+    return roster
 
 
 def main():
@@ -109,7 +118,7 @@ def main():
 
     memories = read_memories(vault_path)
     env = read_env()
-    enabled, roster = read_roster(vault_path)
+    roster = read_roster(vault_path)
 
     # Build providers dict from env
     providers = {}
@@ -117,41 +126,40 @@ def main():
         providers['anthropic'] = {'api_key': env['ANTHROPIC_API_KEY']}
     if env.get('GOOGLE_API_KEY'):
         providers['google'] = {'api_key': env['GOOGLE_API_KEY']}
-    if env.get('KIMI_API_KEY'):
-        providers['kimi'] = {'api_key': env['KIMI_API_KEY']}
-    if env.get('OPENROUTER_API_KEY'):
-        providers['openrouter'] = {'api_key': env['OPENROUTER_API_KEY']}
     if env.get('OPENAI_API_KEY'):
         providers['openai'] = {'api_key': env['OPENAI_API_KEY']}
+    providers['mode'] = 'cli-proxy' if env.get('PROXY_MODE', '').lower() == 'true' else 'api-keys'
+
+    talaria_enabled = 'talaria' in roster
 
     output = {
-        'version': '1.0',
+        'version': '2.0',
         'date': datetime.now().strftime('%Y-%m-%d'),
         'user': {
             'name': memories.get('name', 'User'),
             'email': memories.get('email', ''),
             'timezone': memories.get('timezone', 'UTC'),
         },
+        'team': {
+            'name': memories.get('team_name', 'My Team'),
+        },
         'paths': {
             'vault': vault_path,
             'hermes_home': env.get('HERMES_HOME', str(Path.home() / '.hermes')),
         },
-        'agents': {
-            'enabled': enabled or ['orchestrator', 'coder'],
-            'roster': roster,
-        },
         'providers': providers,
-        'delivery': {
-            'platform': 'local-only',
+        'agents': {
+            'roster': roster,
+            'talaria_enabled': talaria_enabled,
+        },
+        'lab': {
+            'default_profile': 'auto',
         },
         'projects': {
-            'health': (Path(vault_path) / 'projects' / 'health').exists(),
-            'finance': (Path(vault_path) / 'projects' / 'finance').exists(),
+            'lab': (Path(vault_path) / 'projects' / 'agent-distribution-lab').exists(),
         },
-        'locale': {
-            'currency_symbol': '$',
-            'country_code': 'Generic',
-            'household_mode': memories.get('household', 'single'),
+        'delivery': {
+            'platform': 'local-only',
         },
         'install': {
             'mode': 'gui',
@@ -159,13 +167,18 @@ def main():
         },
     }
 
+    if talaria_enabled:
+        output['ollama'] = {
+            'base_url': env.get('OLLAMA_BASE_URL', 'http://localhost:11434'),
+        }
+
     out_path = 'setup_answers.yaml'
     with open(out_path, 'w') as f:
         yaml.dump(output, f, default_flow_style=False, sort_keys=False)
 
     print(f"Wrote {out_path}")
-    print(f"  Enabled agents: {', '.join(output['agents']['enabled'])}")
-    print(f"  Providers: {', '.join(providers.keys())}")
+    print(f"  Agents: {', '.join(roster.keys()) or '(roster not found)'}")
+    print(f"  Provider mode: {providers['mode']}")
 
 
 if __name__ == '__main__':

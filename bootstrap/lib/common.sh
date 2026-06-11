@@ -153,6 +153,64 @@ except Exception as e:
 }
 
 # ------------------------------------------------------------------
+# Template Rendering
+# ------------------------------------------------------------------
+# render_template <src> <dst> KEY=VAL...
+# Replaces every {{KEY}} occurrence in <src> with VAL and writes <dst>.
+# Pure string replacement (no regex), so values may contain any characters.
+# <src> and <dst> may be the same file (in-place render).
+render_template() {
+    local src="$1"
+    local dst="$2"
+    shift 2
+    python3 - "$src" "$dst" "$@" << 'PYEOF'
+import sys
+
+src, dst = sys.argv[1], sys.argv[2]
+with open(src) as f:
+    text = f.read()
+for arg in sys.argv[3:]:
+    if '=' not in arg:
+        sys.exit(f"render_template: bad KEY=VAL argument: {arg!r}")
+    key, val = arg.split('=', 1)
+    text = text.replace('{{' + key + '}}', val)
+with open(dst, 'w') as f:
+    f.write(text)
+PYEOF
+}
+
+# verify_no_placeholders <dir>
+# Fails if any unrendered {{PLACEHOLDER}} marker remains under <dir>.
+# *.tmpl files are excluded: they carry placeholders by design and are
+# rendered elsewhere (e.g. AGENT_ROSTER.md.tmpl by stage 40).
+verify_no_placeholders() {
+    local dir="$1"
+    local matches
+    matches=$(grep -rEn --exclude='*.tmpl' '\{\{[A-Z_]+\}\}' "$dir" 2>/dev/null || true)
+    if [[ -n "$matches" ]]; then
+        echo "$matches"
+        die "Unrendered {{PLACEHOLDER}} markers found under $dir"
+    fi
+    info "Placeholder check: PASS ($dir)"
+}
+
+# ------------------------------------------------------------------
+# setup_answers schema guard
+# ------------------------------------------------------------------
+# Schema 2.0 (team-of-agents) is required. Version 1.0 answer files are
+# rejected — rerun the interview (INTERVIEW.md).
+require_answers_v2() {
+    local file="${1:-setup_answers.yaml}"
+    require_file "$file"
+    local version
+    version=$(read_yaml_key "$file" "version" || echo "")
+    case "$version" in
+        2|2.*) ;;
+        *) die "$file has schema version '${version:-missing}'. Version 2.0 is required — version 1.0 answers are rejected. Rerun the interview (INTERVIEW.md)." ;;
+    esac
+}
+
+# ------------------------------------------------------------------
 # Portable sed -i
 # ------------------------------------------------------------------
 sed_inplace() {
