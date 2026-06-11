@@ -21,7 +21,7 @@ This runbook bootstraps a complete Hermes multi-agent system from a fresh Linux 
 - A structured **Home-Brain vault** (Obsidian-compatible Markdown)
 - A **Hermes runtime** (`~/.hermes`) with agent profiles and delivery configs
 - **Sub-agents** wired to your chosen LLM providers
-- **Starter projects** for Health and Finance management
+- The **agent-distribution-lab** governance project (profiles, ranker, POC validation)
 - A passing **smoke test** proving the chain works
 
 **Time estimate:** 10–20 minutes, mostly automated.
@@ -67,7 +67,7 @@ Or run stage by stage (recommended for first time):
 ./bootstrap/50-smoke-test.sh
 ./bootstrap/60-delivery.sh
 ./bootstrap/70-autostart.sh
-./bootstrap/80-starter-projects.sh
+./bootstrap/80-lab-seed.sh
 ./bootstrap/90-first-run.sh
 ```
 
@@ -181,7 +181,7 @@ ls -ld ~/.hermes | awk '{print $1}' | grep "drwx------"
 **What Happens:**
 1. Read `paths.vault` from `setup_answers.yaml`
 2. Copy `templates/vault/` recursively to `$VAULT_PATH`
-3. Interpolate variables: `${USER_NAME}`, `${USER_EMAIL}`, `${TIMEZONE}`, `${CURRENCY_SYMBOL}`, `${COUNTRY_CODE}`, `${HOUSEHOLD_MODE}`
+3. Interpolate variables: `{{USER_NAME}}`, `{{USER_EMAIL}}`, `{{TEAM_NAME}}`, `{{TIMEZONE}}`, `{{VAULT_PATH}}`, `{{HERMES_HOME}}`, `{{TEAM_DOMAIN_BLURB}}`
 4. Update `hermes-setup.state` → `STEP=4`
 
 **Artifacts:** Fully populated vault.
@@ -189,7 +189,7 @@ ls -ld ~/.hermes | awk '{print $1}' | grep "drwx------"
 **Verification:**
 ```bash
 # No raw placeholders remaining
-grep -r '\${' "$VAULT_PATH" || echo "PASS: No un-interpolated variables"
+grep -r '{{' "$VAULT_PATH" || echo "PASS: No un-interpolated variables"
 # Core files exist
 test -f "$VAULT_PATH/brain/hot.md"
 test -f "$VAULT_PATH/brain/Memories.md"
@@ -286,23 +286,24 @@ systemctl --user status hermes-orchestrator | grep -q "Loaded"
 
 ---
 
-### Step 8 — Seed Starter Projects
+### Step 8 — Lab Seed
 
-**Purpose:** Copy health and/or finance starter templates if user enabled them.
+**Purpose:** Verify the agent-distribution-lab project landed (it is copied + interpolated by Step 4 as part of the vault tree), or remove it if disabled.
 
-**User Input:** `projects.health`, `projects.finance` from interview.
+**User Input:** `projects.lab` from interview.
 
 **What Happens:**
-1. If `projects.health=true`: copy `templates/projects/health/` → `$VAULT_PATH/projects/health/`
-2. If `projects.finance=true`: copy `templates/projects/finance/` → `$VAULT_PATH/projects/finance/`
-3. Update `hermes-setup.state` → `STEP=8`
+1. If `projects.lab=true` (default): verify `$VAULT_PATH/projects/agent-distribution-lab/` has its core files and point the user at the WS bootstrap prompt
+2. If `projects.lab=false`: remove the lab directory from the seeded vault
+3. Ensure `$VAULT_PATH/projects/_archived/` exists
+4. Update `hermes-setup.state` → `STEP=8`
 
-**Artifacts:** `projects/health/` and/or `projects/finance/` in vault.
+**Artifacts:** `projects/agent-distribution-lab/` in vault (when enabled).
 
 **Verification:**
 ```bash
-test -f "$VAULT_PATH/projects/health/index.md"
-test -f "$VAULT_PATH/projects/finance/index.md"
+test -f "$VAULT_PATH/projects/agent-distribution-lab/README.md"
+test -f "$VAULT_PATH/projects/agent-distribution-lab/poc-validation.md"
 ```
 
 ---

@@ -6,7 +6,7 @@
 
 ## Role Definition
 
-**You are the Setup Agent.** Your goal is to execute the Hermes Setup Kit on a fresh Linux or macOS machine and reach a green `smoke-test-report.json` with `overall: PASS`, then complete delivery config, auto-start, starter projects, and first-run simulation.
+**You are the Setup Agent.** Your goal is to execute the Hermes Setup Kit on a fresh Linux or macOS machine and reach a green `smoke-test-report.json` with `overall: PASS`, then complete delivery config, auto-start, lab seed, and first-run simulation.
 
 Read this file first, then execute stages in `bootstrap/` in order, respecting `hermes-setup.state`. Do not skip steps. Do not proceed past a failed verification block.
 
@@ -70,7 +70,7 @@ If the user chooses CLI proxy mode during interview:
 | 5 | `bootstrap/50-smoke-test.sh` | Provider ping, vault integrity, permission audit |
 | 6 | `bootstrap/60-delivery.sh` | Write Telegram/Slack profiles to `~/.hermes/profiles/` |
 | 7 | `bootstrap/70-autostart.sh` | Create systemd user units or screen wrapper |
-| 8 | `bootstrap/80-starter-projects.sh` | Copy health/finance starter projects if enabled |
+| 8 | `bootstrap/80-lab-seed.sh` | Verify/seed the agent-distribution-lab project (remove if disabled) |
 | 9 | `bootstrap/90-first-run.sh` | Validate brain files, run mock orchestrator, print summary |
 
 ---
@@ -79,7 +79,7 @@ If the user chooses CLI proxy mode during interview:
 
 Every stage script contains a **verification block** at the bottom. You must run it and confirm success before advancing. Common checks:
 
-- `grep -r '\${' "$VAULT_PATH"` → must return zero matches after interpolation
+- `grep -r '{{' "$VAULT_PATH"` → must return zero matches after interpolation
 - `ls -ld ~/.hermes` → must show `drwx------`
 - `stat -c '%a' .env` → must show `600`
 - Provider `models` endpoint (API-keys mode) → must return HTTP 200
