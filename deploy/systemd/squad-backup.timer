@@ -1,0 +1,13 @@
+# squad-backup.timer — fire squad-backup.service nightly. RandomizedDelaySec
+# spreads load on shared hosts; Persistent catches up after downtime.
+
+[Unit]
+Description=Squad-Mind nightly backup timer
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

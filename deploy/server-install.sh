@@ -115,7 +115,7 @@ log "/srv/squad layout ready"
 # ------------------------------------------------------------------
 # 3. Prereqs: apt packages, hermes venv (+ optional node / ollama)
 # ------------------------------------------------------------------
-PKGS=(python3 python3-yaml python3-venv git curl jq)
+PKGS=(python3 python3-yaml python3-venv git curl jq sqlite3 zstd)  # sqlite3+zstd: backup/audit timers
 if [[ "$CLI_PROXY_DEV" == "1" ]]; then
     PKGS+=(nodejs npm)   # dev/laptop proxy mode only — never the server default
 fi
@@ -334,6 +334,12 @@ relink_workspaces "$VAULT_PATH"
 install -m 644 "$CHECKOUT/deploy/systemd/squad-mind.target" \
     "$CHECKOUT/deploy/systemd/hermes-gateway@.service" \
     "$CHECKOUT/deploy/systemd/llm-proxy@.service" \
+    "$CHECKOUT/deploy/systemd/vault-autocommit.service" \
+    "$CHECKOUT/deploy/systemd/vault-autocommit.timer" \
+    "$CHECKOUT/deploy/systemd/squad-backup.service" \
+    "$CHECKOUT/deploy/systemd/squad-backup.timer" \
+    "$CHECKOUT/deploy/systemd/audit-export.service" \
+    "$CHECKOUT/deploy/systemd/audit-export.timer" \
     /etc/systemd/system/
 
 # Instance `default` is the orchestrator: root HERMES_HOME (its config.yaml
@@ -360,7 +366,11 @@ systemctl enable squad-mind.target
 for profile in "${GATEWAY_INSTANCES[@]}"; do
     systemctl enable "hermes-gateway@${profile}.service"
 done
-log "Units installed and enabled (squad-mind.target + ${GATEWAY_INSTANCES[*]})"
+TIMERS=(vault-autocommit squad-backup audit-export)
+for timer in "${TIMERS[@]}"; do
+    systemctl enable "${timer}.timer"
+done
+log "Units installed and enabled (squad-mind.target + ${GATEWAY_INSTANCES[*]} + timers: ${TIMERS[*]})"
 
 # ------------------------------------------------------------------
 # 8. Next steps

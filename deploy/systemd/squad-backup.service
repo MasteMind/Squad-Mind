@@ -1,0 +1,17 @@
+# squad-backup.service — nightly HERMES_HOME backup (sqlite .backup copies
+# + tar.zst) to /srv/squad/archive/backups/, uploaded to $BACKUP_GCS_BUCKET
+# when set (see deploy/scripts/backup-to-gcs.sh). Driven by squad-backup.timer.
+
+[Unit]
+Description=Squad-Mind nightly backup (local + GCS)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+Environment=HERMES_HOME=/srv/squad/hermes
+EnvironmentFile=/srv/squad/secrets/.env
+ExecStart=/usr/bin/bash /srv/squad/squad-mind/deploy/scripts/backup-to-gcs.sh
+Nice=10
+IOSchedulingClass=idle

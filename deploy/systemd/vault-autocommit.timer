@@ -1,0 +1,11 @@
+# vault-autocommit.timer — fire vault-autocommit.service every 5 minutes.
+
+[Unit]
+Description=Squad-Mind vault auto-commit every 5 minutes
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

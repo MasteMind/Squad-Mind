@@ -1,0 +1,17 @@
+# vault-autocommit.service — commit + git-sync /srv/squad/brain.
+# Driven by vault-autocommit.timer (every 5 min); installed by
+# ../server-install.sh. Never force-pushes; conflicts abort + alert via
+# $SLACK_ALERT_WEBHOOK (see deploy/scripts/vault-autocommit.sh).
+
+[Unit]
+Description=Squad-Mind vault auto-commit and git sync
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+WorkingDirectory=/srv/squad/brain
+Environment=VAULT_PATH=/srv/squad/brain
+EnvironmentFile=/srv/squad/secrets/.env
+ExecStart=/usr/bin/bash /srv/squad/squad-mind/deploy/scripts/vault-autocommit.sh
