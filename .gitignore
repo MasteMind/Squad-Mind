@@ -34,6 +34,6 @@ venv/
 PROMOTION_*.md
 LINKEDIN_POST_*.md
 
-# Vault content (user-generated, not committed)
-templates/vault/
-!templates/vault/**/.gitkeep
+# llm-cli-proxy is vendored as a git submodule (see A7 / patches/);
+# until the submodule conversion lands, the local clone stays untracked.
+tools/llm-cli-proxy/
