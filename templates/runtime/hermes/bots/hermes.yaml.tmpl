@@ -1,0 +1,23 @@
+# rendered by bootstrap/40-agents-wire.sh — defaults from models.lock.yaml
+# (hermes: cli=claude, model=claude-opus-4-7, port=3456)
+id: hermes
+name: Hermes
+role: orchestrator
+cli: {{HERMES_CLI}}
+model: {{HERMES_MODEL}}
+workspace: {{VAULT_PATH}}/agents/Hermes
+persona: {{VAULT_PATH}}/agents/Hermes/AGENTS.md
+launcher: {{HERMES_HOME}}/scripts/launch-hermes.sh
+proxy:
+  url: http://127.0.0.1:{{HERMES_PORT}}/v1
+  port: {{HERMES_PORT}}
+  screen_session: proxy-hermes
+context:
+  brain:
+    - Memories.md
+    - Skills.md
+    - hot.md
+  roster:
+    - AGENT_ROSTER.md
+  projects_scope: all   # symlinked the whole projects/ tree
+status: active

@@ -1,0 +1,24 @@
+# rendered by bootstrap/40-agents-wire.sh — defaults from models.lock.yaml
+# (hephaestus: cli=codex, model=gpt-5.5, port=3458)
+id: hephaestus
+name: Hephaestus
+role: builder
+cli: {{HEPHAESTUS_CLI}}
+model: {{HEPHAESTUS_MODEL}}
+workspace: {{VAULT_PATH}}/agents/Hephaestus
+persona: {{VAULT_PATH}}/agents/Hephaestus/AGENTS.md
+launcher: {{HERMES_HOME}}/scripts/launch-hephaestus.sh
+proxy:
+  url: http://127.0.0.1:{{HEPHAESTUS_PORT}}/v1
+  port: {{HEPHAESTUS_PORT}}
+  screen_session: proxy-hephaestus
+context:
+  brain:
+    - Memories.md
+    - Skills.md
+    - hot.md
+  roster:
+    - AGENT_ROSTER.md
+  projects_scope:
+    - agent-distribution-lab   # symlinked from ../../projects/agent-distribution-lab
+status: active

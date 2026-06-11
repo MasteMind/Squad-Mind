@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# rendered by bootstrap/40-agents-wire.sh as
+#   {{HERMES_HOME}}/scripts/launch-{{AGENT_ID}}.sh
+# Launch {{AGENT_NAME}} ({{AGENT_ROLE}}) — {{AGENT_CLI}} CLI scoped to its workspace.
+# "$@" is runtime shell expansion (pass-through args), kept literal on purpose.
+set -euo pipefail
+cd "{{AGENT_WORKSPACE}}"
+exec {{AGENT_CLI}} "$@"

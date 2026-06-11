@@ -1,0 +1,21 @@
+# rendered by bootstrap/40-agents-wire.sh — Linux equivalent of
+# launchd/ai.hermes.gateway.plist.tmpl. %i is the gateway profile
+# (systemctl --user enable --now hermes-gateway@talaria).
+# Invocation matches the live launchd plists:
+#   python -m hermes_cli.main --profile <id> gateway run --replace
+
+[Unit]
+Description=hermes gateway (profile %i)
+After=network.target
+
+[Service]
+WorkingDirectory={{HERMES_HOME}}/profiles/%i
+Environment=HERMES_HOME={{HERMES_HOME}}/profiles/%i
+Environment=VIRTUAL_ENV={{HERMES_VENV}}
+EnvironmentFile=-{{HERMES_HOME}}/.env
+ExecStart={{HERMES_VENV}}/bin/python -m hermes_cli.main --profile %i gateway run --replace
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
