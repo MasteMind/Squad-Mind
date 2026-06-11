@@ -97,6 +97,7 @@ Durable SQLite-backed board that lets the squad profiles collaborate on shared t
 - **Dispatcher:** long-lived loop that (default every 60s) reclaims stale claims, promotes ready tasks, atomically claims, and spawns assigned profiles.
 - **Board** is the hard boundary — workers are spawned with `HERMES_KANBAN_BOARD` pinned in their env. **Tenant** is a soft namespace within a board.
 - After `kanban.failure_limit` consecutive non-success attempts on the same task (default: 2), the dispatcher auto-blocks it to prevent spin loops.
+- **POC gating:** any card whose deliverable is running code that emits measurable output is a POC — pair it with a validate card owned by a different squad agent before the owner card completes. Full contract: `{{VAULT_PATH}}/projects/agent-distribution-lab/poc-validation.md`.
 
 Reserved-name pitfall (squad workflow):
 - `_RESERVED_NAMES = {hermes, default, test, tmp, root, sudo}` in

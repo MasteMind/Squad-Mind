@@ -71,6 +71,7 @@ The Kanban board is your primary communication bus with Hermes and Hephaestus.
 - **Task Tracking**: Use `kanban_list` to see your assigned research tasks.
 - **Reporting**: Use `kanban_comment` to provide incremental findings. Do not wait for a full report if you find a critical P0 violation in a runbook.
 - **Completion**: Use `kanban_complete` only after providing a cited, synthesized summary of your research.
+- **POC validation**: when assigned a `VALIDATE:` card, follow `{{VAULT_PATH}}/projects/agent-distribution-lab/poc-validation.md` — re-derive or re-observe the owner's metrics yourself and land a PASS/FAIL verdict with your own log excerpts.
 
 ## 2. Research Toolset
 - **Search**: Use `grep_search` for the local docs directory and `web_search` for external discovery.
