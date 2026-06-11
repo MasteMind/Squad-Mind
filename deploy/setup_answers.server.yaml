@@ -1,0 +1,51 @@
+# setup_answers.server.yaml — headless server answer profile (schema 2.0).
+#
+# This file is NOT consumed in place. deploy/server-install.sh copies it to
+# <checkout>/setup_answers.yaml, rewriting the __MARKER__ values from env/flags
+# (TEAM_NAME, ADMIN_NAME, ADMIN_EMAIL, SQUAD_TIMEZONE) and flipping
+# agents.talaria_enabled to true when TALARIA_LOCAL=1.
+#
+# Server invariants (do not change casually):
+#   - providers.mode is api-keys. CLI proxies are dev/laptop mode only:
+#     Claude Max / Codex / Gemini Advanced are per-human consumer licenses, so
+#     a shared server must use API keys (Vertex AI recommended). Keys are NOT
+#     recorded here — they live in /srv/squad/secrets/.env (root:hermes 640).
+#   - paths are the fixed /srv/squad layout the systemd units hardcode.
+#   - install.mode is headless (no Obsidian GUI on a server).
+#   - install.auto_start is systemd, but bootstrap stage 70 is intentionally
+#     skipped: it renders USER-scope units; the server uses the SYSTEM-scope
+#     units from deploy/systemd/, installed by server-install.sh.
+
+version: "2.0"
+date: "__DATE__"
+user:
+  name: "__ADMIN_NAME__"
+  email: "__ADMIN_EMAIL__"
+  timezone: "__TIMEZONE__"
+team:
+  name: "__TEAM_NAME__"
+paths:
+  vault: "/srv/squad/brain"
+  hermes_home: "/srv/squad/hermes"
+providers:
+  mode: "api-keys"             # never cli-proxy on a shared server (licensing)
+agents:
+  roster: {}                   # defaults come from models.lock.yaml
+  # Server default: talaria OFF. The local qwen model needs ~8-10GB RAM
+  # (see deploy/systemd/ollama.service.notes.md). server-install.sh flips
+  # this to true when invoked with TALARIA_LOCAL=1. Cheaper alternative:
+  # rebind talaria to an API flash model via agents.roster.talaria.
+  talaria_enabled: false
+ollama:
+  base_url: "http://127.0.0.1:11434"   # used only when talaria_enabled: true
+lab:
+  default_profile: "auto"
+projects:
+  lab: true
+delivery:
+  # Delivery (Slack) is configured at the gateway level on servers, not via
+  # the interview — keep the vault-only default here.
+  platform: "local-only"
+install:
+  mode: "headless"
+  auto_start: "systemd"        # system units via deploy/systemd/, not stage 70
