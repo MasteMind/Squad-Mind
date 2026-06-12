@@ -1,0 +1,14 @@
+# audit-export.timer — fire audit-export.service nightly, shortly after
+# midnight. Persistent catches up after downtime (the export is idempotent
+# per day, so a late catch-up run just rewrites yesterday's file).
+
+[Unit]
+Description=Squad-Mind nightly audit export timer
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

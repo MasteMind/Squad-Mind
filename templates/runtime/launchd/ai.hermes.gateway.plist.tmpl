@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- rendered by bootstrap/40-agents-wire.sh — one instance per gateway profile.
+       {{AGENT_ID}}    gateway profile id (e.g. hephaestus, talaria)
+       {{HERMES_HOME}} home for THIS gateway instance:
+                       root home (~/.hermes) for the orchestrator,
+                       <root>/profiles/{{AGENT_ID}} for profile gateways
+       {{HERMES_VENV}} hermes-agent virtualenv, e.g. <root>/hermes-agent/venv
+     For the orchestrator's root gateway, render Label "ai.hermes.gateway"
+     and drop the two "--profile"/"{{AGENT_ID}}" argument strings.
+     Install as ~/Library/LaunchAgents/<Label>.plist -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.hermes.gateway-{{AGENT_ID}}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{HERMES_VENV}}/bin/python</string>
+        <string>-m</string>
+        <string>hermes_cli.main</string>
+        <string>--profile</string>
+        <string>{{AGENT_ID}}</string>
+        <string>gateway</string>
+        <string>run</string>
+        <string>--replace</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>{{HERMES_HOME}}</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{HERMES_VENV}}/bin:{{HOME}}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>VIRTUAL_ENV</key>
+        <string>{{HERMES_VENV}}</string>
+        <key>HERMES_HOME</key>
+        <string>{{HERMES_HOME}}</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>{{HERMES_HOME}}/logs/gateway.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>{{HERMES_HOME}}/logs/gateway.error.log</string>
+</dict>
+</plist>

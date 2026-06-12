@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- rendered by bootstrap/40-agents-wire.sh — one instance per proxied agent
+     (talaria is exempt: it talks directly to Ollama, no proxy).
+       {{NODE_BIN}}   node binary, e.g. /opt/homebrew/bin/node
+       {{PROXY_DIST}} llm-cli-proxy entrypoint, e.g. {{HERMES_HOME}}/llm-cli-proxy-link/dist/index.js
+     Install as ~/Library/LaunchAgents/ai.hermes.proxy-<agent>.plist -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.hermes.proxy-{{AGENT_ID}}</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{NODE_BIN}}</string>
+        <string>{{PROXY_DIST}}</string>
+        <string>--provider</string>
+        <string>{{AGENT_CLI}}</string>
+        <string>--port</string>
+        <string>{{AGENT_PORT}}</string>
+        <string>--workspace</string>
+        <string>{{AGENT_WORKSPACE}}</string>
+        <string>--model</string>
+        <string>{{AGENT_MODEL}}</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>{{AGENT_WORKSPACE}}</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>{{HOME}}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HERMES_KANBAN_DB</key>
+        <string>{{HERMES_HOME}}/kanban.db</string>
+        <key>LLM_CLI_PROXY_REQUEST_TIMEOUT_MS</key>
+        <string>3600000</string>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/proxy-{{AGENT_ID}}.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/proxy-{{AGENT_ID}}.err.log</string>
+</dict>
+</plist>

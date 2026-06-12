@@ -1,0 +1,24 @@
+# rendered by bootstrap/40-agents-wire.sh — defaults from models.lock.yaml
+# (clio: cli=agy, model=gemini-2.5-flash, port=3457)
+id: clio
+name: Clio
+role: researcher
+cli: {{CLIO_CLI}}
+model: {{CLIO_MODEL}}
+workspace: {{VAULT_PATH}}/agents/Clio
+persona: {{VAULT_PATH}}/agents/Clio/AGENTS.md
+launcher: {{HERMES_HOME}}/scripts/launch-clio.sh
+proxy:
+  url: http://127.0.0.1:{{CLIO_PORT}}/v1
+  port: {{CLIO_PORT}}
+  screen_session: proxy-clio
+context:
+  brain:
+    - Memories.md
+    - Skills.md
+    - hot.md
+  roster:
+    - AGENT_ROSTER.md
+  projects_scope:
+    - agent-distribution-lab   # symlinked from ../../projects/agent-distribution-lab
+status: active

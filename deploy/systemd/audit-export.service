@@ -1,0 +1,15 @@
+# audit-export.service — export yesterday's task_events/task_comments/
+# task_runs rows as JSONL into /srv/squad/brain/audit/ (the next
+# vault-autocommit tick commits it). Driven by audit-export.timer.
+
+[Unit]
+Description=Squad-Mind nightly kanban audit export
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=hermes
+Group=hermes
+Environment=KANBAN_DB=/srv/squad/hermes/kanban.db
+Environment=AUDIT_DIR=/srv/squad/brain/audit
+ExecStart=/usr/bin/bash /srv/squad/squad-mind/deploy/scripts/export-audit.sh

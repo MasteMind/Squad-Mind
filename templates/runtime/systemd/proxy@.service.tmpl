@@ -1,0 +1,24 @@
+# rendered by bootstrap/40-agents-wire.sh — Linux equivalent of
+# launchd/ai.hermes.proxy.plist.tmpl. %i is the agent id
+# (systemctl --user enable --now proxy@hermes).
+#
+# NOTE on ${AGENT_*}: these are systemd runtime expansions, NOT kit
+# placeholders — systemd substitutes them from the EnvironmentFiles at
+# start. The per-agent file {{HERMES_HOME}}/proxies/%i.env must define
+# AGENT_CLI, AGENT_PORT, AGENT_WORKSPACE and AGENT_MODEL.
+
+[Unit]
+Description=hermes llm-cli-proxy (%i)
+After=network.target
+
+[Service]
+EnvironmentFile={{HERMES_HOME}}/.env
+EnvironmentFile=-{{HERMES_HOME}}/proxies/%i.env
+Environment=HERMES_KANBAN_DB={{HERMES_HOME}}/kanban.db
+Environment=LLM_CLI_PROXY_REQUEST_TIMEOUT_MS=3600000
+ExecStart={{NODE_BIN}} {{PROXY_DIST}} --provider ${AGENT_CLI} --port ${AGENT_PORT} --workspace ${AGENT_WORKSPACE} --model ${AGENT_MODEL}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,4 @@
+[submodule "tools/llm-cli-proxy"]
+	path = tools/llm-cli-proxy
+	url = https://github.com/MasteMind/llm-cli-proxy.git
+	branch = squad-mind

@@ -1,0 +1,49 @@
+# models.lock.yaml — single source of truth for the squad's agent bindings.
+#
+# Every consumer reads THIS file, never hardcoded values:
+#   - INTERVIEW.md defaults (per-agent model override table)
+#   - templates/runtime/hermes/bots/*.yaml.tmpl defaults
+#   - bootstrap/50-smoke-test.sh (port probes + bot yaml validation)
+#   - scripts/sync_from_live.py (drift detection, --live and --ci)
+#
+# Canonical values are taken from the running launchd plists of the
+# reference deployment (the plists are the running truth; bot YAMLs and
+# AGENT_ROSTER.md have historically drifted).
+#
+# To bump a model: change it here, run scripts/sync-from-live.sh --ci,
+# and let the bootstrap re-render bot YAMLs on the next run.
+
+version: 1
+
+agents:
+  hermes:
+    role: orchestrator
+    cli: claude
+    model: claude-opus-4-7
+    port: 3456
+  hephaestus:
+    role: builder
+    cli: codex
+    model: gpt-5.5
+    port: 3458
+  clio:
+    role: researcher
+    cli: agy
+    model: gemini-2.5-flash
+    port: 3457
+  talaria:
+    role: junior
+    runtime: ollama
+    model: "qwen3.5:9b-q4_K_M"
+    port: null          # no proxy — talks to Ollama directly
+    temperature: 0
+
+# Pinned hermes-agent config schema version the config.overlay.yaml
+# was authored against. sync_from_live.py --ci asserts the pinned
+# hermes-agent's default config reports a version >= this.
+hermes_agent:
+  config_version: 26
+
+# Default Ollama endpoint for the junior agent (overridable at interview).
+ollama:
+  base_url: http://localhost:11434

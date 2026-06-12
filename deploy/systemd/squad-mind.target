@@ -1,0 +1,19 @@
+# squad-mind.target — one team's agent squad on a shared Ubuntu VM.
+# System scope (/etc/systemd/system/), installed by deploy/server-install.sh.
+#
+# hermes-gateway@talaria.service is NOT listed: the server default runs
+# without a local Ollama. server-install.sh enables it as an additional
+# Wants= only when installed with TALARIA_LOCAL=1 (see ollama.service.notes.md).
+#
+# llm-proxy@.service is deliberately NOT pulled in — CLI-subscription proxies
+# are dev/laptop mode only (licensing; see llm-proxy@.service header).
+
+[Unit]
+Description=Squad-Mind agent squad (gateways for one team)
+Wants=hermes-gateway@default.service
+Wants=hermes-gateway@hephaestus.service
+Wants=hermes-gateway@clio.service
+After=network-online.target
+
+[Install]
+WantedBy=multi-user.target

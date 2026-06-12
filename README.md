@@ -1,135 +1,123 @@
 # Squad-Mind
 
-A shareable, agent-executable bootstrap kit for building end-to-end AI agent teams with a shared knowledge brain.
+A reproducible **team-of-thoughts**: bootstrap a 4-agent engineering squad with
+a shared, git-backed team brain — on your laptop or on a team server.
 
-## What is Squad-Mind?
+## What it is
 
-Squad-Mind helps you spin up a **team of specialized AI agents** — each with their own role, model, and purpose — all connected to a shared **Home-Brain vault** (an Obsidian-compatible Markdown knowledge base).
+Squad-Mind installs and wires a squad of specialized AI agents that coordinate
+through a durable kanban board and a shared Markdown vault:
 
-Originally built for the Hermes multi-agent system, Squad-Mind is fully generalized: use it for personal productivity, professional workflows, or any project where a team of AI agents needs structured memory and coordination.
+| Agent | Role | What it does |
+|---|---|---|
+| **Hermes** | orchestrator | Talks to humans, decomposes work, enforces governance |
+| **Hephaestus** | builder | Writes, tests, debugs, and refactors code |
+| **Clio** | researcher | External surveys, doc navigation, evidence collection |
+| **Talaria** | junior | Mechanical single-file edits, dispatched by the builder |
 
-## Who is this for?
+Around the squad:
 
-- **Developers** who want their own private, extensible AI agent system
-- **Teams** who need structured agent workflows with shared knowledge
-- **Builders** who want to prototype multi-agent setups without boilerplate
-- **Individuals** who want to automate their life — health tracking, financial planning, learning, and daily productivity — with agents that actually remember context
-- Anyone with at least one LLM API key (or CLI subscription) who believes AI works better in teams
+- **Team-brain vault** — an Obsidian-compatible Markdown knowledge base the
+  agents read and write; on servers it's a git repo with full history.
+- **Kanban coordination** — SQLite-backed board; tenant-isolated working
+  sessions; a dispatcher that claims and spawns agents.
+- **Distribution-lab governance** — named agent-distribution profiles
+  (P1/P2/P3), a scoring rubric, and a **POC-validation contract**: any card
+  claiming measured numbers must be independently reproduced by a *different*
+  agent before it can close. See
+  [templates/vault/projects/agent-distribution-lab/](templates/vault/projects/agent-distribution-lab/README.md).
 
-## Personal Use: Your Life, Automated
+Per-agent model/CLI/port bindings are pinned in [models.lock.yaml](models.lock.yaml)
+— the single source of truth every consumer reads.
 
-Squad-Mind isn't just for engineering teams. It's how we personally manage:
+## Two deployment modes
 
-- **Health** — track checkups, medications, vaccinations, and insurance across family members
-- **Finance** — net worth, monthly budgets, investments, tax planning, and action items
-- **Knowledge** — a Home-Brain vault that agents read and write to, so nothing is lost between sessions
-- **Daily priorities** — agents start every session knowing what's top of mind
+| | **Laptop** (single user) | **Team server** (shared) |
+|---|---|---|
+| Install | Interview + bootstrap stages | [deploy/server-install.sh](deploy/server-install.sh) |
+| Providers | API keys **or** CLI-subscription proxies | **API keys only** (CLI subscriptions are per-human licenses — see the licensing box in [docs/server-deployment.md](docs/server-deployment.md)) |
+| Surface | CLI / local gateway | Slack (mention-gated, Socket Mode) |
+| Brain | Local vault | Git repo, auto-committed, humans edit via PR |
+| Ops | manual / launchd / user systemd | system units, nightly backups, audit export |
 
-Your agents become teammates for life, not just work.
-
-## Quick Start
-
-### Option A: Native Installation (default)
+### Quickstart — laptop
 
 ```bash
-git clone https://github.com/MasteMind/Squad-Mind.git
-cd Squad-Mind
-# Run with any capable CLI agent (Claude Code, Kimi, Codex, etc.)
-# Or run the bootstrap scripts manually:
+git clone --recurse-submodules <repo-url> squad-mind && cd squad-mind
+# Run with any capable CLI agent (it reads AGENTS.md and interviews you), or by hand:
 ./bootstrap/00-prereqs.sh
-./bootstrap/10-obsidian.sh
+./bootstrap/10-obsidian.sh        # or --headless
 ./bootstrap/20-hermes-core.sh
 ./bootstrap/30-vault-seed.sh
 ./bootstrap/40-agents-wire.sh
 ./bootstrap/50-smoke-test.sh
 ./bootstrap/60-delivery.sh
 ./bootstrap/70-autostart.sh
-./bootstrap/80-starter-projects.sh
+./bootstrap/80-lab-seed.sh
 ./bootstrap/90-first-run.sh
 ```
 
-### Option B: Docker Fast-Path (isolated, zero-config)
+The interview ([INTERVIEW.md](INTERVIEW.md)) asks ~14 questions and generates
+the whole system from your answers. CLI-proxy mode (Claude Max / Gemini
+Advanced subscriptions) is fine here — it's your personal license on your
+machine.
+
+### Quickstart — team server
 
 ```bash
-docker-compose -f docker-compose.bootstrap.yml up
+git clone --recurse-submodules <repo-url> && cd Squad-Mind
+sudo deploy/server-install.sh --team-name "My Team" \
+    --admin-name "Alex" --timezone "UTC" \
+    --brain-git-url git@github.com:org/team-brain.git
+sudo vim /srv/squad/secrets/.env      # API keys + Slack tokens
+sudo systemctl start squad-mind.target
 ```
 
-## What Gets Installed
+Full runbook (sizing, Slack app from
+[deploy/slack/app-manifest.yml](deploy/slack/app-manifest.yml), verification,
+backup/restore, troubleshooting): [docs/server-deployment.md](docs/server-deployment.md).
 
-1. **Obsidian** (optional — skipped with `--headless` for servers)
-2. **Home-Brain vault** — structured Markdown knowledge base at your chosen path
-3. **Agent runtime** (`~/.hermes`) — agent profiles, bot configs, scripts, backups
-4. **Sub-agents** — wired to your chosen LLM providers (API keys or CLI proxies)
-5. **Starter projects** — Health Management and Finance Management templates
-6. **Auto-start** — systemd user units or screen wrappers (optional)
-
-## Provider Modes
-
-| Mode | Best For |
-|------|---------|
-| **API Keys** | Users with API credits, no CLI subscriptions |
-| **CLI Proxy** | Users with Claude Max or Gemini Advanced subscriptions |
-| **Mixed** | One agent via proxy, another via API key — whatever works for you |
-
-The kit writes all configured credentials to `.env` and each agent uses the connection you choose.
-
-## Minimum Requirements
-
-- Linux or macOS
-- Internet connection
-- 1 GB free disk space
-- At least one LLM provider:
-  - API key (Anthropic, Google, Kimi, OpenRouter, OpenAI, Ollama), OR
-  - CLI subscription (Claude Max, Gemini Advanced)
-
-## Interview-Driven Setup
-
-The kit asks you ~15 questions up front (name, timezone, which agents to enable, API keys, etc.) and generates a personalized system from your answers. No personal data is hardcoded — everything is interpolated from your responses.
-
-## Project Structure
+## Repo map
 
 ```
 Squad-Mind/
-├── AGENTS.md              # "README for agents" — machine-readable execution guide
-├── setup.md               # Human-readable runbook
-├── INTERVIEW.md           # Scripted Q&A for setup personalization
-├── bootstrap/             # Stage scripts (00-90)
-├── templates/             # Vault + runtime skeletons + systemd units
-├── scripts/               # Utilities (uninstall, rotate-keys, reverse-interview, backup, health-check)
-├── tests/                 # Integration & crash-recovery tests
-├── .github/workflows/     # CI (Docker-based integration tests + ShellCheck)
-└── docker-compose.bootstrap.yml  # Optional Docker fast-path
+├── AGENTS.md              # machine-readable execution guide for setup agents
+├── setup.md               # human-readable laptop runbook
+├── INTERVIEW.md           # scripted Q&A (answers schema v2)
+├── models.lock.yaml       # pinned agent ↔ model bindings (single source of truth)
+├── ONBOARDING.md          # team-facing: Slack usage, POC flow, reading the brain
+├── bootstrap/             # laptop stage scripts (00–90)
+├── deploy/                # server: installer, systemd units, Slack manifest, ops scripts
+├── docs/                  # server-deployment.md, phase2-hardening.md, llm-cli-proxy.md
+├── templates/
+│   ├── vault/             # brain seed: agents, lab governance, project template
+│   ├── runtime/           # bot configs, launchd/systemd unit templates
+│   └── skills/run-poc/    # orchestrator playbook for chat-driven POC sessions
+├── scripts/               # utilities (backup, restore, rotate-keys, health-check, …)
+├── tests/                 # integration + crash-recovery tests
+└── tools/                 # vendored submodules (llm-cli-proxy — see docs/llm-cli-proxy.md)
 ```
+
+## For your team
+
+- New teammate? Start with [ONBOARDING.md](ONBOARDING.md).
+- Operating a server? [docs/server-deployment.md](docs/server-deployment.md),
+  then [docs/phase2-hardening.md](docs/phase2-hardening.md) for what comes next
+  (and what is deliberately not built).
 
 ## Security
 
-- `.env` is created with `chmod 600` and auto-added to `.gitignore`
-- API keys are never committed
-- `~/.hermes` is created with `drwx------` permissions
-- CLI proxies bind to `127.0.0.1` only (never `0.0.0.0`)
-- Use `scripts/rotate-keys.py` to safely rotate credentials
-- Use `scripts/backup-vault.sh` before destructive operations
-
-## Utilities
-
-```bash
-./scripts/backup-vault.sh           # Backup vault to ~/.hermes/backups/
-./scripts/restore-vault.sh          # Restore from a backup
-./scripts/health-check.sh           # Verify entire stack is healthy
-./scripts/rotate-keys.py            # Rotate API keys safely
-./scripts/reverse-interview.py      # Regenerate interview from current vault
-./scripts/uninstall.sh              # Remove runtime, preserve vault
-./scripts/uninstall.sh --purge      # Remove runtime + vault
-```
+- `.env` is `chmod 600` and git-ignored; server secrets live in
+  `/srv/squad/secrets/.env` (`root:hermes 640`)
+- CLI proxies bind to `127.0.0.1` only — and are dev/laptop mode only
+- `scripts/rotate-keys.py` rotates credentials safely (laptop and server paths)
+- Nightly backups + JSONL audit export on servers
 
 ## Testing
 
 ```bash
-# Full integration test in a clean Debian container
-./tests/bootstrap-integration.sh
-
-# Crash-recovery / idempotency test
-./tests/crash-recovery.sh
+./tests/bootstrap-integration.sh    # full integration test in a clean container
+./tests/crash-recovery.sh           # idempotency / resume-after-crash
 ```
 
 ## License

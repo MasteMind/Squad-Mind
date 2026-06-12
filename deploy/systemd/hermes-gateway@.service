@@ -1,0 +1,34 @@
+# hermes-gateway@.service — SYSTEM-scope gateway unit for the shared server.
+# Server sibling of templates/runtime/systemd/hermes-gateway@.service.tmpl
+# (user scope, rendered): same invocation, but static — fixed /srv/squad
+# paths, single `hermes` service user, secrets from /srv/squad/secrets/.env.
+#
+# %i is the gateway profile: default | hephaestus | clio | talaria.
+# Instance `default` is the orchestrator and the ONLY instance that runs the
+# kanban dispatcher (config.yaml kanban.dispatch_in_gateway). The installer
+# enforces this two ways:
+#   - drop-in hermes-gateway@default.service.d/10-root-profile.conf points
+#     `default` at the root HERMES_HOME (/srv/squad/hermes, dispatch true,
+#     no --profile flag — mirrors the reference deployment's root gateway);
+#   - non-default profiles get kanban.dispatch_in_gateway: false written
+#     into /srv/squad/hermes/profiles/<id>/config.yaml.
+
+[Unit]
+Description=hermes gateway (profile %i)
+PartOf=squad-mind.target
+After=network-online.target
+
+[Service]
+User=hermes
+Group=hermes
+WorkingDirectory=/srv/squad/hermes
+Environment=HERMES_HOME=/srv/squad/hermes/profiles/%i
+Environment=VIRTUAL_ENV=/srv/squad/hermes/venv
+Environment=VAULT_PATH=/srv/squad/brain
+EnvironmentFile=/srv/squad/secrets/.env
+ExecStart=/srv/squad/hermes/venv/bin/python -m hermes_cli.main --profile %i gateway run --replace
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=squad-mind.target

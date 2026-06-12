@@ -1,0 +1,22 @@
+# rendered by bootstrap/40-agents-wire.sh — defaults from models.lock.yaml
+# (talaria: runtime=ollama, model=qwen3.5:9b-q4_K_M, no proxy, temperature=0)
+# Talaria has NO proxy block and no launcher: it runs as a hermes gateway
+# profile and talks directly to Ollama at ollama_url.
+id: talaria
+name: Talaria
+role: junior
+runtime: ollama
+model: "{{TALARIA_MODEL}}"
+ollama_url: {{OLLAMA_BASE_URL}}
+temperature: 0
+workspace: {{VAULT_PATH}}/agents/Talaria
+persona: {{VAULT_PATH}}/agents/Talaria/AGENTS.md
+context:
+  brain:
+    - Memories.md
+    - Skills.md
+    - hot.md
+  roster:
+    - AGENT_ROSTER.md
+  projects_scope: []
+status: active

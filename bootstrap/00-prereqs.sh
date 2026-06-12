@@ -24,7 +24,11 @@ info "Internet connectivity: OK"
 # ------------------------------------------------------------------
 # 3. Check disk space
 # ------------------------------------------------------------------
-FREE_GB=$(df -BG "$HOME" | awk 'NR==2 {print $4}' | tr -d 'G')
+if df -BG "$HOME" >/dev/null 2>&1; then
+    FREE_GB=$(df -BG "$HOME" | awk 'NR==2 {print $4}' | tr -d 'G')
+else
+    FREE_GB=$(df -g "$HOME" | awk 'NR==2 {print $4}')
+fi
 if [[ "$FREE_GB" -lt 1 ]]; then
     die "Insufficient disk space: ${FREE_GB}GB free, need at least 1GB"
 fi
@@ -69,6 +73,13 @@ elif command -v pip3 &>/dev/null; then
 else
     warn "Neither uv nor pip3 found. Some scripts may fail."
 fi
+
+# PyYAML is required by stages 20/40/50 (config merge, bot YAML rendering,
+# smoke-test validation). Fail early with a friendly hint.
+if ! python3 -c 'import yaml' 2>/dev/null; then
+    die "PyYAML not importable by python3. Install it first: 'uv pip install pyyaml' or 'pip3 install --user pyyaml'"
+fi
+info "PyYAML: OK"
 
 # ------------------------------------------------------------------
 # 8. Initialize state

@@ -1,0 +1,32 @@
+# DEV/LAPTOP MODE ONLY — running CLI-subscription proxies (Claude Max /
+# ChatGPT Codex / Gemini Advanced) on a SHARED server violates per-human
+# consumer licensing, creates bus-factor-1 auth, and makes spend
+# un-attributable. Server deployments use API keys (see
+# deploy/env/server.env.example, Vertex AI recommended).
+#
+# This unit exists only for a single-human dev box that happens to run
+# systemd system units. It is NOT pulled in by squad-mind.target and is
+# never enabled by deploy/server-install.sh.
+#
+# Server sibling of templates/runtime/systemd/proxy@.service.tmpl. %i is the
+# agent id; ${AGENT_*} are systemd runtime expansions resolved from
+# /srv/squad/hermes/proxies/%i.env (AGENT_CLI, AGENT_PORT, AGENT_WORKSPACE,
+# AGENT_MODEL).
+
+[Unit]
+Description=hermes llm-cli-proxy (%i) — dev/laptop mode only
+After=network-online.target
+
+[Service]
+User=hermes
+Group=hermes
+EnvironmentFile=/srv/squad/secrets/.env
+EnvironmentFile=-/srv/squad/hermes/proxies/%i.env
+Environment=HERMES_KANBAN_DB=/srv/squad/hermes/kanban.db
+Environment=LLM_CLI_PROXY_REQUEST_TIMEOUT_MS=3600000
+ExecStart=/usr/bin/node /srv/squad/hermes/llm-cli-proxy-link/dist/index.js --provider ${AGENT_CLI} --port ${AGENT_PORT} --workspace ${AGENT_WORKSPACE} --model ${AGENT_MODEL}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

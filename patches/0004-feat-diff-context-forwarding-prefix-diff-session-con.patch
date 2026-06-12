@@ -1,0 +1,545 @@
+From 4456f4a87c278d1fb2eddf622ddfa18931fd2e67 Mon Sep 17 00:00:00 2001
+From: Squad-Mind <squad-mind@users.noreply.github.com>
+Date: Fri, 12 Jun 2026 09:31:32 +0530
+Subject: [PATCH 4/4] =?UTF-8?q?feat:=20diff-context-forwarding=20=E2=80=94?=
+ =?UTF-8?q?=20prefix-diff=20session=20context=20before=20forwarding=20to?=
+ =?UTF-8?q?=20CLI?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+OpenAI-compatible clients (gateways, agent frameworks) replay the FULL
+conversation history on every /v1/chat/completions call. The proxied
+CLIs, however, already hold that history in their own resumed session
+(--resume / --conversation chaining). Forwarding the whole array every
+turn makes the CLI re-ingest an ever-growing transcript: token cost and
+latency grow quadratically over a long session.
+
+Mechanism:
+
+- openai-adapter: new hashMessage() — sha1 over a normalized
+  {role, content, name, tool_call_id, tool_calls} projection of each
+  OpenAI message, giving a stable per-message fingerprint.
+- session-manager: each SessionManager keeps forwardedHashes — the
+  fingerprint sequence of everything the CLI session has already
+  ingested: all input messages shipped so far PLUS the assistant reply
+  the CLI produced each turn (committed after a successful response via
+  commitForwardedHashes, threaded through the request queue as
+  pendingForwardedHashes so single-concurrency serialization keeps the
+  bookkeeping race-free).
+- On each request, diffAgainstSession() hashes the incoming messages
+  and compares the leading entries against forwardedHashes. On an exact
+  prefix match, only the new tail is converted (toCliMessage) and piped
+  to the CLI, which supplies the older context itself via --resume.
+- Full context is re-sent (and the resume id + hash state reset, so the
+  CLI starts a fresh session) whenever: no CLI session exists yet, the
+  prefix doesn't match (client edited/forked history), or the tail is
+  empty (client replayed identical history). LLM_CLI_PROXY_NO_DIFF=1
+  disables diffing entirely and restores upstream behavior.
+
+Supporting changes that shipped with the live-tested WIP line:
+
+- buildSpawnArgs(resumeSessionId, opts?) now threads the request model
+  and an optional --agent name (new -a/--agent CLI flag, Claude only)
+  into the spawned CLI.
+- claude: --permission-mode bypassPermissions for squad workspaces,
+  optional ANTHROPIC_BASE_URL/ANTHROPIC_AUTH_TOKEN passthrough.
+- gemini: --skip-trust + --approval-mode auto_edit (Gemini CLI 0.43+
+  workspace-trust gate), refreshed model list.
+- codex: route through SessionManager/CLI instead of CodexDirectSession
+  so codex turns get --resume chaining and prefix-diffing too;
+  --skip-git-repo-check for non-repo workspaces; gpt-5.5 models.
+- per-request timeout now defaults to 30 min, overridable via
+  LLM_CLI_PROXY_REQUEST_TIMEOUT_MS.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ src/index.ts            |  40 +++++++------
+ src/openai-adapter.ts   |  18 +++++-
+ src/providers/base.ts   |   4 +-
+ src/providers/claude.ts |  20 ++++++-
+ src/providers/codex.ts  |   8 ++-
+ src/providers/gemini.ts |  19 +++++--
+ src/session-manager.ts  | 121 ++++++++++++++++++++++++++++++++++++----
+ 7 files changed, 194 insertions(+), 36 deletions(-)
+
+diff --git a/src/index.ts b/src/index.ts
+index 50332a3..a0da265 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -7,7 +7,6 @@ import { homedir } from 'node:os';
+ import { execSync } from 'node:child_process';
+ import { getProvider, getSupportedProviders } from './providers/index.js';
+ import { SessionManager } from './session-manager.js';
+-import { CodexDirectSession } from './codex-direct-session.js';
+ import { createServer } from './server.js';
+ import type { ISession } from './types.js';
+ 
+@@ -47,10 +46,15 @@ program
+     '-m, --model <model>',
+     'Model override (default: provider\'s default model)',
+   )
++  .option(
++    '-a, --agent <name>',
++    'Named agent to launch the CLI with (Claude only — forwarded as `claude --agent <name>`)',
++  )
+   .action(async (opts) => {
+     const providerName = opts.provider as string;
+     const workspace = resolve(opts.workspace as string);
+     const model = opts.model as string | undefined;
++    const agent = opts.agent as string | undefined;
+ 
+     // ── Validate provider ─────────────────────────────────────────
+     let provider;
+@@ -67,20 +71,18 @@ program
+       process.exit(1);
+     }
+ 
+-    // ── Check CLI binary is installed (skip for codex — uses direct API) ──
+-    if (providerName !== 'codex') {
+-      try {
+-        execSync(`${provider.binary} --version`, {
+-          stdio: 'pipe',
+-          timeout: 10000,
+-        });
+-      } catch {
+-        console.error(
+-          `❌ CLI binary "${provider.binary}" not found.\n` +
+-          `   Install it first — see README.md for setup instructions.`,
+-        );
+-        process.exit(1);
+-      }
++    // ── Check CLI binary is installed ──
++    try {
++      execSync(`${provider.binary} --version`, {
++        stdio: 'pipe',
++        timeout: 10000,
++      });
++    } catch {
++      console.error(
++        `❌ CLI binary "${provider.binary}" not found.\n` +
++        `   Install it first — see README.md for setup instructions.`,
++      );
++      process.exit(1);
+     }
+ 
+     // ── Resolve port ──────────────────────────────────────────────
+@@ -113,9 +115,10 @@ program
+     }
+ 
+     // ── Start session ─────────────────────────────────────────────
+-    const session: ISession = providerName === 'codex'
+-      ? new CodexDirectSession(model)
+-      : new SessionManager(provider, workspace, undefined, model);
++    if (agent && providerName !== 'claude') {
++      console.warn(`⚠️  --agent is only used by the Claude provider; ignored for ${providerName}.`);
++    }
++    const session: ISession = new SessionManager(provider, workspace, undefined, model, agent);
+ 
+     console.log('');
+     console.log('┌──────────────────────────────────────────────┐');
+@@ -124,6 +127,7 @@ program
+     console.log('');
+     console.log(`  Provider:   ${provider.displayName}`);
+     console.log(`  Model:      ${model || provider.defaultModel}`);
++    if (agent) console.log(`  Agent:      ${agent}`);
+     console.log(`  Port:       ${port}`);
+     console.log(`  Workspace:  ${workspace}`);
+     console.log('');
+diff --git a/src/openai-adapter.ts b/src/openai-adapter.ts
+index 47604b3..4789bc1 100644
+--- a/src/openai-adapter.ts
++++ b/src/openai-adapter.ts
+@@ -1,4 +1,4 @@
+-import { randomUUID } from 'node:crypto';
++import { createHash, randomUUID } from 'node:crypto';
+ import type {
+   NdjsonEvent,
+   CliResponse,
+@@ -9,6 +9,22 @@ import type {
+ } from './types.js';
+ import type { ProviderConfig } from './providers/base.js';
+ 
++/**
++ * Stable fingerprint of a single OpenAI message. Used by SessionManager to
++ * detect which prefix of the incoming history has already been forwarded to
++ * the CLI in a prior turn, so it can ship only the new tail.
++ */
++export function hashMessage(msg: OpenAIMessage): string {
++  const norm = JSON.stringify({
++    role: msg.role,
++    content: msg.content ?? '',
++    name: msg.name ?? null,
++    tool_call_id: msg.tool_call_id ?? null,
++    tool_calls: msg.tool_calls ?? null,
++  });
++  return createHash('sha1').update(norm).digest('hex');
++}
++
+ // ── OpenAI-compatible Format Adapter ────────────────────────────────
+ 
+ /**
+diff --git a/src/providers/base.ts b/src/providers/base.ts
+index 38ab33f..0697135 100644
+--- a/src/providers/base.ts
++++ b/src/providers/base.ts
+@@ -44,8 +44,10 @@ export interface ProviderConfig {
+   /**
+    * Build spawn args for a request.
+    * @param resumeSessionId - Session ID to resume from (empty on first request)
++   * @param opts.agent - Optional named agent to launch the CLI with (Claude only)
++   * @param opts.model - Model id from the OpenAI request, threaded into CLI's --model flag
+    */
+-  buildSpawnArgs(resumeSessionId: string): string[];
++  buildSpawnArgs(resumeSessionId: string, opts?: { agent?: string; model?: string }): string[];
+ 
+   /** Build the stdin payload for the prompt (used when usesStdinPipe is true) */
+   buildStdinMessage(content: string): string;
+diff --git a/src/providers/claude.ts b/src/providers/claude.ts
+index 5500b2b..2ba9184 100644
+--- a/src/providers/claude.ts
++++ b/src/providers/claude.ts
+@@ -13,6 +13,10 @@ import type { ProviderConfig } from './base.js';
+  *
+  * This mimics a developer using `claude -p` and resuming conversations,
+  * which is the normal, intended usage pattern.
++ *
++ * env: ANTHROPIC_BASE_URL passthrough lets you redirect Claude CLI at a
++ * different OpenAI/Anthropic-compatible endpoint (e.g. Ollama acting as an
++ * Anthropic shim) without modifying the global Claude CLI config.
+  */
+ export const claudeProvider: ProviderConfig = {
+   binary: 'claude',
+@@ -25,16 +29,30 @@ export const claudeProvider: ProviderConfig = {
+   mode: 'per-request',
+   emitsInit: false,
+   usesStdinPipe: true,
++  env: process.env.ANTHROPIC_BASE_URL ? {
++    ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
++    ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
++  } : undefined,
+ 
+-  buildSpawnArgs(resumeSessionId: string): string[] {
++  buildSpawnArgs(resumeSessionId: string, opts?: { agent?: string; model?: string }): string[] {
+     const args = [
+       '-p',
+       '--output-format', 'stream-json',
+       '--verbose',
++      // `auto` only auto-approves edits; squad agents need to dispatch via the
++      // `hermes kanban` shell, run tests, etc. User authorized bypassPermissions
++      // explicitly during plan execution — workspace is operator-controlled.
++      '--permission-mode', 'bypassPermissions',
+     ];
++    if (opts?.model) {
++      args.push('--model', opts.model);
++    }
+     if (resumeSessionId) {
+       args.push('--resume', resumeSessionId);
+     }
++    if (opts?.agent) {
++      args.push('--agent', opts.agent);
++    }
+     return args;
+   },
+ 
+diff --git a/src/providers/codex.ts b/src/providers/codex.ts
+index 6c5ed91..561df95 100644
+--- a/src/providers/codex.ts
++++ b/src/providers/codex.ts
+@@ -19,8 +19,10 @@ import type { ProviderConfig } from './base.js';
+ export const codexProvider: ProviderConfig = {
+   binary: 'codex',
+   displayName: 'Codex CLI',
+-  defaultModel: 'gpt-5.4',
++  defaultModel: 'gpt-5.5',
+   models: [
++    'gpt-5.5',
++    'gpt-5.5-pro',
+     'gpt-5.4',
+     'gpt-5.4-pro',
+   ],
+@@ -29,16 +31,20 @@ export const codexProvider: ProviderConfig = {
+   usesStdinPipe: true,
+ 
+   buildSpawnArgs(resumeSessionId: string): string[] {
++    // --skip-git-repo-check: workspace cwds are not guaranteed to be git repos
++    // (Hephaestus's Home-Brain dir isn't). Without it, codex refuses to run.
+     if (resumeSessionId) {
+       return [
+         'exec', 'resume',
+         '--last',
+         '--json',
++        '--skip-git-repo-check',
+       ];
+     }
+     return [
+       'exec',
+       '--json',
++      '--skip-git-repo-check',
+       '-',  // Read prompt from stdin
+     ];
+   },
+diff --git a/src/providers/gemini.ts b/src/providers/gemini.ts
+index ba52ae9..4f565cd 100644
+--- a/src/providers/gemini.ts
++++ b/src/providers/gemini.ts
+@@ -12,25 +12,36 @@ import type { ProviderConfig } from './base.js';
+  *   - "result"  — completion with status and stats
+  *
+  * Session ID comes from the "init" event for --resume chaining.
++ *
++ * NOTE: Gemini CLI 0.43+ refuses to run in untrusted workspaces by default
++ * (silently emits "Approval mode overridden" + trust error to stderr, then
++ * exits). `--skip-trust` opts the spawned process into trusting the current
++ * workspace for one session — required for the proxy use case where the
++ * workspace path is set by the operator, not by the model.
+  */
+ export const geminiProvider: ProviderConfig = {
+   binary: 'gemini',
+   displayName: 'Gemini CLI',
+-  defaultModel: 'gemini-3.1-flash',
++  defaultModel: 'gemini-2.5-flash',
+   models: [
+-    'gemini-3.1-flash',
+-    'gemini-3.1-pro',
+     'gemini-2.5-flash',
+     'gemini-2.5-pro',
++    'gemini-3.1-flash-lite-preview',
++    'gemini-3.1-pro',
+   ],
+   mode: 'per-request',
+   emitsInit: false,
+   usesStdinPipe: true,
+ 
+-  buildSpawnArgs(resumeSessionId: string): string[] {
++  buildSpawnArgs(resumeSessionId: string, opts?: { agent?: string; model?: string }): string[] {
+     const args = [
++      '--skip-trust',
++      '--approval-mode', 'auto_edit',
+       '--output-format', 'stream-json',
+     ];
++    if (opts?.model) {
++      args.push('--model', opts.model);
++    }
+     if (resumeSessionId) {
+       args.push('--resume', resumeSessionId);
+     }
+diff --git a/src/session-manager.ts b/src/session-manager.ts
+index 9ecca4e..177337f 100644
+--- a/src/session-manager.ts
++++ b/src/session-manager.ts
+@@ -3,14 +3,21 @@ import { createInterface, type Interface as ReadlineInterface } from 'node:readl
+ import { randomUUID } from 'node:crypto';
+ import type { ProviderConfig } from './providers/base.js';
+ import type { NdjsonEvent, CliResponse, ToolCallEvent, OpenAIMessage } from './types.js';
+-import { toCliMessage } from './openai-adapter.js';
++import { hashMessage, toCliMessage, toOpenAIToolCalls } from './openai-adapter.js';
+ 
+ // ── Constants ───────────────────────────────────────────────────────
+ 
+ const BACKOFF_BASE_MS = 2000;
+ const BACKOFF_MAX_MS = 30000;
+ const STARTUP_GRACE_MS = 3000;
+-const RESULT_TIMEOUT_MS = 300000; // 5 minutes max per request
++// Per-request ceiling. Default 30 min so Opus deep-thinking turns don't get
++// guillotined mid-reasoning. Override via the LLM_CLI_PROXY_REQUEST_TIMEOUT_MS
++// env var (milliseconds) if you need to clamp it down on a per-profile basis.
++const RESULT_TIMEOUT_MS = Number(process.env.LLM_CLI_PROXY_REQUEST_TIMEOUT_MS) || 1800000;
++
++// Set LLM_CLI_PROXY_NO_DIFF=1 to disable prefix-diffing and restore the
++// upstream "send full history every turn" behavior.
++const DIFF_DISABLED = process.env.LLM_CLI_PROXY_NO_DIFF === '1';
+ 
+ // ── SessionManager ──────────────────────────────────────────────────
+ 
+@@ -35,10 +42,17 @@ export class SessionManager {
+   private restartCount = 0;
+   private restartTimer: ReturnType<typeof setTimeout> | null = null;
+   private model: string;
++  private agent: string | undefined;
+ 
+   // Resume chaining: track the provider's session ID for --resume
+   private lastProviderSessionId: string = '';
+ 
++  // Prefix-diffing: hashes of messages already ingested by the CLI session
++  // (the client's prior input PLUS the assistant turn the CLI produced). If
++  // the next request's leading hashes match this exact sequence, only the
++  // remainder is forwarded.
++  private forwardedHashes: string[] = [];
++
+   // Event handling (persistent mode)
+   private eventHandlers: Array<(event: NdjsonEvent) => void> = [];
+   private initResolve: ((value: void) => void) | null = null;
+@@ -50,6 +64,10 @@ export class SessionManager {
+     onEvent?: (event: NdjsonEvent) => void;
+     resolve: (response: CliResponse) => void;
+     reject: (reason: Error) => void;
++    // Bookkeeping: hashes of all input messages this request shipped to the
++    // CLI (full array, not just the tail). After a successful response, we
++    // append the hash of the assistant's reply and commit to forwardedHashes.
++    pendingForwardedHashes: string[];
+   }> = [];
+   private processing = false;
+ 
+@@ -58,11 +76,13 @@ export class SessionManager {
+     workspaceDir: string,
+     sessionId?: string,
+     model?: string,
++    agent?: string,
+   ) {
+     this.provider = provider;
+     this.workspaceDir = workspaceDir;
+     this.proxySessionId = sessionId || randomUUID();
+     this.model = model || provider.defaultModel;
++    this.agent = agent;
+   }
+ 
+   // ── Lifecycle ───────────────────────────────────────────────────
+@@ -76,7 +96,7 @@ export class SessionManager {
+     }
+ 
+     // Persistent mode: spawn the CLI binary
+-    const args = this.provider.buildSpawnArgs(this.lastProviderSessionId);
++    const args = this.provider.buildSpawnArgs(this.lastProviderSessionId, { agent: this.agent, model: this.model });
+ 
+     console.log(`[session] Spawning ${this.provider.binary}:`, args.join(' '));
+     console.log(`[session] Working directory: ${this.workspaceDir}`);
+@@ -247,9 +267,15 @@ export class SessionManager {
+   // ── Message Sending ─────────────────────────────────────────────
+ 
+   sendMessage(messages: OpenAIMessage[]): Promise<CliResponse> {
+-    const content = toCliMessage(messages);
++    const { tail, allHashes } = this.diffAgainstSession(messages);
++    const content = toCliMessage(tail);
+     return new Promise((resolve, reject) => {
+-      this.requestQueue.push({ content, resolve, reject });
++      this.requestQueue.push({
++        content,
++        resolve,
++        reject,
++        pendingForwardedHashes: allHashes,
++      });
+       this.processQueue();
+     });
+   }
+@@ -258,13 +284,87 @@ export class SessionManager {
+     messages: OpenAIMessage[],
+     onEvent: (event: NdjsonEvent) => void,
+   ): Promise<CliResponse> {
+-    const content = toCliMessage(messages);
++    const { tail, allHashes } = this.diffAgainstSession(messages);
++    const content = toCliMessage(tail);
+     return new Promise((resolve, reject) => {
+-      this.requestQueue.push({ content, onEvent, resolve, reject });
++      this.requestQueue.push({
++        content,
++        onEvent,
++        resolve,
++        reject,
++        pendingForwardedHashes: allHashes,
++      });
+       this.processQueue();
+     });
+   }
+ 
++  /**
++   * Compare incoming messages against what the CLI session has already seen
++   * (forwardedHashes). Returns the tail that still needs to be sent.
++   *
++   * Falls back to sending the full array when:
++   *   - prefix-diffing is disabled (LLM_CLI_PROXY_NO_DIFF=1)
++   *   - no CLI session has been established yet (no --resume id)
++   *   - the leading hashes don't match what we last saw (treat as a new
++   *     conversation: also reset the resume id so the CLI starts fresh)
++   */
++  private diffAgainstSession(
++    messages: OpenAIMessage[],
++  ): { tail: OpenAIMessage[]; allHashes: string[] } {
++    const allHashes = messages.map(hashMessage);
++
++    if (DIFF_DISABLED) return { tail: messages, allHashes };
++
++    if (!this.lastProviderSessionId || this.forwardedHashes.length === 0) {
++      console.log(`[diff] cold session — forwarding full payload (${messages.length} msgs)`);
++      return { tail: messages, allHashes };
++    }
++
++    const expected = this.forwardedHashes;
++    let prefixOk = allHashes.length >= expected.length;
++    if (prefixOk) {
++      for (let i = 0; i < expected.length; i++) {
++        if (allHashes[i] !== expected[i]) { prefixOk = false; break; }
++      }
++    }
++
++    if (!prefixOk) {
++      console.log(`[diff] prefix mismatch — resetting CLI session, forwarding full payload`);
++      this.lastProviderSessionId = '';
++      this.forwardedHashes = [];
++      return { tail: messages, allHashes };
++    }
++
++    const tail = messages.slice(expected.length);
++    if (tail.length === 0) {
++      console.log(`[diff] empty tail (client replayed identical history) — resetting and forwarding full payload`);
++      this.lastProviderSessionId = '';
++      this.forwardedHashes = [];
++      return { tail: messages, allHashes };
++    }
++    console.log(`[diff] forwarding ${tail.length}/${messages.length} msgs (skipped ${expected.length})`);
++    return { tail, allHashes };
++  }
++
++  /**
++   * Commit forwardedHashes after a successful turn: the CLI now knows the
++   * input we just shipped PLUS the assistant reply it produced.
++   */
++  private commitForwardedHashes(
++    pendingForwardedHashes: string[],
++    response: CliResponse,
++  ): void {
++    if (DIFF_DISABLED) return;
++    const assistantMsg: OpenAIMessage = {
++      role: 'assistant',
++      content: response.text || null,
++      ...(response.toolCalls.length
++        ? { tool_calls: toOpenAIToolCalls(response.toolCalls) }
++        : {}),
++    };
++    this.forwardedHashes = [...pendingForwardedHashes, hashMessage(assistantMsg)];
++  }
++
+   private processQueue(): void {
+     if (this.processing || this.requestQueue.length === 0 || !this.alive) return;
+ 
+@@ -278,6 +378,7 @@ export class SessionManager {
+     execute(request)
+       .then((response) => {
+         this.processing = false;
++        this.commitForwardedHashes(request.pendingForwardedHashes, response);
+         request.resolve(response);
+         this.processQueue();
+       })
+@@ -361,8 +462,8 @@ export class SessionManager {
+     onEvent?: (event: NdjsonEvent) => void;
+   }): Promise<CliResponse> {
+     return new Promise((resolve, reject) => {
+-      // Build args with --resume chaining
+-      const args = this.provider.buildSpawnArgs(this.lastProviderSessionId);
++      // Build args with --resume chaining + per-request model passthrough
++      const args = this.provider.buildSpawnArgs(this.lastProviderSessionId, { agent: this.agent, model: this.model });
+ 
+       // For Gemini: append --prompt with the content
+       if (!this.provider.usesStdinPipe) {
+@@ -370,7 +471,7 @@ export class SessionManager {
+       }
+ 
+       const isResume = !!this.lastProviderSessionId;
+-      console.log(`[session] Spawning ${this.provider.binary} (${isResume ? 'resume: ' + this.lastProviderSessionId.slice(0, 8) + '...' : 'new session'})`);
++      console.log(`[session] Spawning ${this.provider.binary} (${isResume ? 'resume: ' + this.lastProviderSessionId.slice(0, 8) + '...' : 'new session'}) args: ${args.join(' ')}`);
+ 
+       const proc = spawn(this.provider.binary, args, {
+         cwd: this.workspaceDir,
+-- 
+2.50.1 (Apple Git-155)
+

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage 7: Enable Auto-Start (systemd, screen, or manual)
+# Stage 7: Enable Auto-Start (launchd, systemd, screen, or manual)
 set -euo pipefail
 
 source "$(dirname "$0")/lib/common.sh"
@@ -8,129 +8,184 @@ guard_step 7
 
 info "=== Stage 7: Auto-Start Configuration ==="
 
-require_file "setup_answers.yaml"
+require_answers_v2 "setup_answers.yaml"
+
+detect_platform
 
 HERMES_HOME=$(read_yaml_key setup_answers.yaml "paths.hermes_home" || echo "$HOME/.hermes")
 HERMES_HOME="${HERMES_HOME/#\~/$HOME}"
-
-VAULT_PATH=$(read_yaml_key setup_answers.yaml "paths.vault" || echo "$HOME/Documents/Home-Brain")
-VAULT_PATH="${VAULT_PATH/#\~/$HOME}"
+export HERMES_HOME
 
 AUTO_START=$(read_yaml_key setup_answers.yaml "install.auto_start" || echo "manual")
-PROVIDER_MODE=$(read_yaml_key setup_answers.yaml "providers.mode" || echo "api-keys")
+
+# launchd is the macOS default when the interview asked for auto-start
+# but a Linux-only mode was recorded.
+if [[ "$PLATFORM" == "macOS" && "$AUTO_START" == "systemd" ]]; then
+    warn "systemd requested on macOS — using launchd instead"
+    AUTO_START="launchd"
+fi
 
 info "Auto-start preference: $AUTO_START"
 
+# Shared render inputs (defaults match the live reference deployment)
+NODE_BIN="${NODE_BIN:-$(command -v node || echo /usr/local/bin/node)}"
+PROXY_DIST="${PROXY_DIST:-$HERMES_HOME/llm-cli-proxy-link/dist/index.js}"
+HERMES_VENV="${HERMES_VENV:-$HERMES_HOME/hermes-agent/venv}"
+
 # ------------------------------------------------------------------
-# systemd
+# Agent table from the rendered bot YAMLs (stage 40 output is the
+# authoritative post-render truth: id, cli, port, workspace, model)
+# ------------------------------------------------------------------
+AGENTS_TSV=$(mktemp)
+export AGENTS_TSV
+
+python3 << 'PYEOF'
+import glob
+import os
+import yaml
+
+hermes_home = os.environ['HERMES_HOME']
+# '|'-separated rows: bash `read` with whitespace IFS collapses empty
+# fields (talaria has no port/cli), so a non-whitespace separator is used.
+rows = []
+for path in sorted(glob.glob(os.path.join(hermes_home, 'bots', '*.yaml'))):
+    with open(path) as f:
+        bot = yaml.safe_load(f)
+    agent_id = bot.get('id', os.path.splitext(os.path.basename(path))[0])
+    cli = bot.get('cli', '')
+    port = str((bot.get('proxy') or {}).get('port', '') or '')
+    workspace = bot.get('workspace', '')
+    model = str(bot.get('model', ''))
+    rows.append('|'.join([agent_id, cli, port, workspace, model]))
+
+with open(os.environ['AGENTS_TSV'], 'w') as f:
+    f.write('\n'.join(rows) + '\n')
+PYEOF
+
+if [[ ! -s "$AGENTS_TSV" ]]; then
+    warn "No rendered bot YAMLs found in $HERMES_HOME/bots — run stage 40 first"
+fi
+
+# ------------------------------------------------------------------
+# launchd (macOS)
+# ------------------------------------------------------------------
+if [[ "$AUTO_START" == "launchd" ]]; then
+    if [[ "$PLATFORM" != "macOS" ]] || ! command -v launchctl &>/dev/null; then
+        warn "launchd auto-start requires macOS with launchctl. Skipping."
+    else
+        info "Configuring launchd agents..."
+
+        LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+        mkdir -p "$LAUNCH_AGENTS_DIR" "$HERMES_HOME/logs"
+        UID_NUM=$(id -u)
+
+        PROXY_TMPL="templates/runtime/launchd/ai.hermes.proxy.plist.tmpl"
+        GATEWAY_TMPL="templates/runtime/launchd/ai.hermes.gateway.plist.tmpl"
+        require_file "$PROXY_TMPL"
+        require_file "$GATEWAY_TMPL"
+
+        # One proxy per proxy-enabled agent (talaria has no port → skipped)
+        while IFS='|' read -r agent_id cli port workspace model; do
+            [[ -z "$port" ]] && continue
+            plist="$LAUNCH_AGENTS_DIR/ai.hermes.proxy-${agent_id}.plist"
+            render_template "$PROXY_TMPL" "$plist" \
+                "AGENT_ID=$agent_id" \
+                "AGENT_CLI=$cli" \
+                "AGENT_PORT=$port" \
+                "AGENT_WORKSPACE=$workspace" \
+                "AGENT_MODEL=$model" \
+                "NODE_BIN=$NODE_BIN" \
+                "PROXY_DIST=$PROXY_DIST" \
+                "HERMES_HOME=$HERMES_HOME" \
+                "HOME=$HOME"
+            launchctl bootstrap "gui/$UID_NUM" "$plist" 2>/dev/null \
+                || info "ai.hermes.proxy-${agent_id} already bootstrapped"
+            info "launchd proxy installed: $plist"
+        done < "$AGENTS_TSV"
+
+        # Root gateway (orchestrator): Label ai.hermes.gateway, no --profile args
+        ROOT_PLIST="$LAUNCH_AGENTS_DIR/ai.hermes.gateway.plist"
+        render_template "$GATEWAY_TMPL" "$ROOT_PLIST" \
+            "AGENT_ID=__ROOT__" \
+            "HERMES_HOME=$HERMES_HOME" \
+            "HERMES_VENV=$HERMES_VENV" \
+            "HOME=$HOME"
+        sed_inplace \
+            -e 's|ai\.hermes\.gateway-__ROOT__|ai.hermes.gateway|' \
+            -e '/<string>--profile<\/string>/d' \
+            -e '/<string>__ROOT__<\/string>/d' \
+            "$ROOT_PLIST"
+        launchctl bootstrap "gui/$UID_NUM" "$ROOT_PLIST" 2>/dev/null \
+            || info "ai.hermes.gateway already bootstrapped"
+        info "launchd gateway installed: $ROOT_PLIST"
+
+        # One gateway per non-orchestrator profile
+        while IFS='|' read -r agent_id cli port workspace model; do
+            [[ "$agent_id" == "hermes" ]] && continue
+            profile_home="$HERMES_HOME/profiles/$agent_id"
+            mkdir -p "$profile_home/logs"
+            plist="$LAUNCH_AGENTS_DIR/ai.hermes.gateway-${agent_id}.plist"
+            render_template "$GATEWAY_TMPL" "$plist" \
+                "AGENT_ID=$agent_id" \
+                "HERMES_HOME=$profile_home" \
+                "HERMES_VENV=$HERMES_VENV" \
+                "HOME=$HOME"
+            launchctl bootstrap "gui/$UID_NUM" "$plist" 2>/dev/null \
+                || info "ai.hermes.gateway-${agent_id} already bootstrapped"
+            info "launchd gateway installed: $plist"
+        done < "$AGENTS_TSV"
+    fi
+fi
+
+# ------------------------------------------------------------------
+# systemd (Linux)
 # ------------------------------------------------------------------
 if [[ "$AUTO_START" == "systemd" ]]; then
     info "Configuring systemd user services..."
 
     SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
-    mkdir -p "$SYSTEMD_USER_DIR"
+    mkdir -p "$SYSTEMD_USER_DIR" "$HERMES_HOME/proxies"
 
-    # Orchestrator service
-    if [[ -f "templates/systemd/hermes-orchestrator.service" ]]; then
-        cp "templates/systemd/hermes-orchestrator.service" \
-            "$SYSTEMD_USER_DIR/hermes-orchestrator.service"
-    else
-        cat > "$SYSTEMD_USER_DIR/hermes-orchestrator.service" << EOF
-[Unit]
-Description=Squad-Mind Hermes Orchestrator
-After=network-online.target
-Wants=network-online.target
+    PROXY_UNIT_TMPL="templates/runtime/systemd/proxy@.service.tmpl"
+    GATEWAY_UNIT_TMPL="templates/runtime/systemd/hermes-gateway@.service.tmpl"
+    require_file "$PROXY_UNIT_TMPL"
+    require_file "$GATEWAY_UNIT_TMPL"
 
-[Service]
-Type=simple
-ExecStart=%h/.hermes/bin/hermes-orchestrator
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
+    render_template "$PROXY_UNIT_TMPL" "$SYSTEMD_USER_DIR/proxy@.service" \
+        "HERMES_HOME=$HERMES_HOME" \
+        "NODE_BIN=$NODE_BIN" \
+        "PROXY_DIST=$PROXY_DIST"
+    render_template "$GATEWAY_UNIT_TMPL" "$SYSTEMD_USER_DIR/hermes-gateway@.service" \
+        "HERMES_HOME=$HERMES_HOME" \
+        "HERMES_VENV=$HERMES_VENV"
+    info "Rendered proxy@.service and hermes-gateway@.service"
 
-[Install]
-WantedBy=default.target
+    # Per-agent environment files consumed by proxy@%i
+    while IFS='|' read -r agent_id cli port workspace model; do
+        [[ -z "$port" ]] && continue
+        cat > "$HERMES_HOME/proxies/${agent_id}.env" << EOF
+AGENT_CLI=$cli
+AGENT_PORT=$port
+AGENT_WORKSPACE=$workspace
+AGENT_MODEL=$model
 EOF
-    fi
-    info "Created hermes-orchestrator.service"
+        chmod 600 "$HERMES_HOME/proxies/${agent_id}.env"
+    done < "$AGENTS_TSV"
 
-    # Proxy services (if cli-proxy mode)
-    if [[ "$PROVIDER_MODE" == "cli-proxy" ]]; then
-        CLI_PROXY_ENABLED=$(python3 -c "
-import yaml
-with open('setup_answers.yaml') as f:
-    data = yaml.safe_load(f)
-for p in data.get('providers', {}).get('cli_proxy', {}).get('enabled', []):
-    print(p)
-" 2>/dev/null || true)
-
-        if echo "$CLI_PROXY_ENABLED" | grep -q "claude"; then
-            if [[ -f "templates/systemd/proxy-claude.service" ]]; then
-                cp "templates/systemd/proxy-claude.service" \
-                    "$SYSTEMD_USER_DIR/hermes-proxy-claude.service"
-            else
-                cat > "$SYSTEMD_USER_DIR/hermes-proxy-claude.service" << EOF
-[Unit]
-Description=Squad-Mind Claude Proxy
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=%h/.npm-global/bin/llm-cli-proxy --provider claude --port 3456 --workspace $VAULT_PATH
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=default.target
-EOF
-            fi
-            info "Created hermes-proxy-claude.service"
-        fi
-
-        if echo "$CLI_PROXY_ENABLED" | grep -q "gemini"; then
-            if [[ -f "templates/systemd/proxy-gemini.service" ]]; then
-                cp "templates/systemd/proxy-gemini.service" \
-                    "$SYSTEMD_USER_DIR/hermes-proxy-gemini.service"
-            else
-                cat > "$SYSTEMD_USER_DIR/hermes-proxy-gemini.service" << EOF
-[Unit]
-Description=Squad-Mind Gemini Proxy
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=%h/.npm-global/bin/llm-cli-proxy --provider gemini --port 3457 --workspace $VAULT_PATH
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=default.target
-EOF
-            fi
-            info "Created hermes-proxy-gemini.service"
-        fi
-    fi
-
-    # Reload and enable
     if command -v systemctl &>/dev/null; then
         systemctl --user daemon-reload 2>/dev/null || warn "systemctl daemon-reload failed"
-        systemctl --user enable hermes-orchestrator 2>/dev/null || warn "Failed to enable hermes-orchestrator"
 
-        if [[ "$PROVIDER_MODE" == "cli-proxy" ]]; then
-            if [[ -f "$SYSTEMD_USER_DIR/hermes-proxy-claude.service" ]]; then
-                systemctl --user enable hermes-proxy-claude 2>/dev/null || true
+        while IFS='|' read -r agent_id cli port workspace model; do
+            if [[ -n "$port" ]]; then
+                systemctl --user enable "proxy@${agent_id}" 2>/dev/null \
+                    || warn "Failed to enable proxy@${agent_id}"
             fi
-            if [[ -f "$SYSTEMD_USER_DIR/hermes-proxy-gemini.service" ]]; then
-                systemctl --user enable hermes-proxy-gemini 2>/dev/null || true
+            if [[ "$agent_id" != "hermes" ]]; then
+                mkdir -p "$HERMES_HOME/profiles/$agent_id"
+                systemctl --user enable "hermes-gateway@${agent_id}" 2>/dev/null \
+                    || warn "Failed to enable hermes-gateway@${agent_id}"
             fi
-        fi
+        done < "$AGENTS_TSV"
 
         info "systemd user services enabled"
     else
@@ -139,7 +194,7 @@ EOF
 fi
 
 # ------------------------------------------------------------------
-# screen wrapper
+# screen wrapper (fallback)
 # ------------------------------------------------------------------
 if [[ "$AUTO_START" == "screen" ]]; then
     info "Creating screen wrapper script..."
@@ -175,6 +230,8 @@ fi
 if [[ "$AUTO_START" == "manual" ]]; then
     info "Auto-start is manual. No services configured."
 fi
+
+rm -f "$AGENTS_TSV"
 
 set_step 7
 info "=== Stage 7 complete ==="

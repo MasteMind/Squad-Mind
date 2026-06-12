@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Set up Docker
         uses: docker/setup-buildx-action@v3
@@ -32,6 +34,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Set up Docker
         uses: docker/setup-buildx-action@v3
@@ -41,10 +45,27 @@ jobs:
           chmod +x tests/crash-recovery.sh
           ./tests/crash-recovery.sh
 
+  drift-static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Run static drift checks
+        run: |
+          chmod +x scripts/sync-from-live.sh
+          ./scripts/sync-from-live.sh --ci --format json
+
   shellcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck

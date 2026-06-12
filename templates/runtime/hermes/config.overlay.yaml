@@ -1,0 +1,32 @@
+# config.overlay.yaml — kit-owned hermes-agent config keys ONLY.
+# Deep-merged into $HERMES_HOME/config.yaml by bootstrap stage 20 (every
+# other key keeps the hermes-agent default / the user's existing value).
+# Authored against hermes-agent _config_version 26 — pinned in
+# models.lock.yaml under hermes_agent.config_version.
+
+model:
+  default: "{{HERMES_MODEL}}"
+  provider: custom
+  base_url: http://localhost:{{HERMES_PORT}}/v1
+
+custom_providers:
+  - name: claude-cli-proxy
+    base_url: http://localhost:{{HERMES_PORT}}/v1
+    model: "{{HERMES_MODEL}}"
+
+curator:
+  enabled: true
+  interval_hours: 168
+  min_idle_hours: 2
+  stale_after_days: 30
+  archive_after_days: 90
+  prune_builtins: true
+  backup:
+    enabled: true
+    keep: 5
+
+kanban:
+  dispatch_in_gateway: true
+  dispatch_interval_seconds: 60
+  failure_limit: 2
+  auto_decompose: true
