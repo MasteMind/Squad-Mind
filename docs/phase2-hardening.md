@@ -42,8 +42,8 @@ team-scoped, and a noisy neighbor can't exist.
 - **Kubernetes** — the runtime is a stateful single-writer SQLite system;
   K8s adds failure modes and gains nothing.
 - **SSO / RBAC engine** — the security boundary is Slack channel membership +
-  `SLACK_ALLOWED_USERS`; finer-grained roles wait for the upstream
-  dispatch-gating hook rather than a homegrown auth layer.
+  `SLACK_ALLOWED_USERS`; finer-grained roles are deliberately out of scope
+  rather than building a homegrown auth layer.
 - **Org-wide OpenAI-compatible API exposure** — the squad is a team surface,
   not a model gateway; exposing it invites unattributable spend and prompt
   abuse.

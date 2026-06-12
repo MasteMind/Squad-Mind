@@ -61,10 +61,9 @@ ask, faster session.
 - The real gate is `SLACK_ALLOWED_USERS`: if your Slack user ID is on the
   server's allowlist, the squad answers you. If not, it ignores you. **The
   security boundary is channel membership plus that allowlist** — nothing finer.
-- "Who may dispatch work" vs "who may only observe" (`SLACK_DISPATCH_USERS`)
-  is currently **policy enforced at the agent-instruction layer**, not in code.
-  An upstream enforcement hook is planned; until it lands, treat dispatch
-  permission as a social contract, not a technical one.
+- There is no finer-grained dispatch-vs-observe split: anyone the squad
+  answers can dispatch work. Treat dispatch etiquette as a team social
+  contract, and keep the allowlist tight.
 
 ## Where audit lives
 
