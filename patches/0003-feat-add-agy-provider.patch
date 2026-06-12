@@ -1,0 +1,284 @@
+From 31cb63b26d224c3945163102751720fe79ec0587 Mon Sep 17 00:00:00 2001
+From: Ramiz Mehran <ramiz.mehran@meesho.com>
+Date: Fri, 12 Jun 2026 09:30:39 +0530
+Subject: [PATCH 3/4] feat: add agy provider
+
+Adds Google's Antigravity CLI (agy) as a fourth proxied provider.
+AGY differs from claude/codex/gemini in three ways, each needing a
+small extension to the provider contract:
+
+- Plain-text stdout: agy --print emits no NDJSON. New optional
+  ProviderConfig.emitsJson flag (default true); when false, the
+  session manager skips the line-by-line JSON parser, accumulates raw
+  stdout, and synthesizes text + result events on process exit.
+- No session id on stdout: agy records conversation ids in
+  ~/.gemini/antigravity-cli/cache/last_conversations.json keyed by
+  workspace path. New optional extractSessionIdFromExit(workspaceDir)
+  hook reads it after each run so the next request can resume via
+  --conversation <id>.
+- No --model flag: model selection lives in
+  ~/.gemini/antigravity-cli/settings.json. The launcher persists the
+  --model value there at proxy startup.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ src/index.ts           | 24 +++++++++++--
+ src/providers/agy.ts   | 77 ++++++++++++++++++++++++++++++++++++++++++
+ src/providers/base.ts  | 20 +++++++++++
+ src/providers/index.ts |  2 ++
+ src/session-manager.ts | 40 +++++++++++++++++++---
+ 5 files changed, 157 insertions(+), 6 deletions(-)
+ create mode 100644 src/providers/agy.ts
+
+diff --git a/src/index.ts b/src/index.ts
+index c0ba612..50332a3 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,8 +1,9 @@
+ #!/usr/bin/env node
+ 
+ import { Command } from 'commander';
+-import { existsSync } from 'node:fs';
+-import { resolve } from 'node:path';
++import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
++import { resolve, dirname, join } from 'node:path';
++import { homedir } from 'node:os';
+ import { execSync } from 'node:child_process';
+ import { getProvider, getSupportedProviders } from './providers/index.js';
+ import { SessionManager } from './session-manager.js';
+@@ -92,6 +93,25 @@ program
+       process.exit(1);
+     }
+ 
++    // ── AGY: write model into ~/.gemini/antigravity-cli/settings.json ──
++    // AGY has no --model CLI flag; the daemon reads its model label from
++    // this settings file. If --model was passed, persist it so the next
++    // spawn uses it.
++    if (providerName === 'agy' && model) {
++      const settingsPath = join(homedir(), '.gemini/antigravity-cli/settings.json');
++      try {
++        mkdirSync(dirname(settingsPath), { recursive: true });
++        const existing = existsSync(settingsPath)
++          ? JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, unknown>
++          : {};
++        existing.model = model;
++        writeFileSync(settingsPath, JSON.stringify(existing, null, 2));
++        console.log(`  📝 Wrote AGY model to ${settingsPath}: ${model}`);
++      } catch (err) {
++        console.warn(`⚠️  Failed to write AGY settings: ${(err as Error).message}`);
++      }
++    }
++
+     // ── Start session ─────────────────────────────────────────────
+     const session: ISession = providerName === 'codex'
+       ? new CodexDirectSession(model)
+diff --git a/src/providers/agy.ts b/src/providers/agy.ts
+new file mode 100644
+index 0000000..ed64f73
+--- /dev/null
++++ b/src/providers/agy.ts
+@@ -0,0 +1,77 @@
++import { readFileSync } from 'node:fs';
++import { homedir } from 'node:os';
++import { join } from 'node:path';
++import type { NdjsonEvent, NormalizedEventType } from '../types.js';
++import type { ProviderConfig } from './base.js';
++
++/**
++ * Antigravity CLI provider configuration.
++ *
++ * AGY (`agy`) is Google's Antigravity coding assistant CLI. Unlike the
++ * other providers in this proxy:
++ *
++ *   - It emits plain text on stdout in --print mode, NOT NDJSON. The
++ *     session-manager's emitsJson:false branch handles synthesis of
++ *     init/text/result events from accumulated stdout.
++ *   - It has no --model flag. Model selection lives in
++ *     ~/.gemini/antigravity-cli/settings.json (key: "model"), as a label
++ *     like "Gemini 3.5 Flash (Low)". The launcher writes this once at
++ *     proxy startup; the AGY process picks it up via that file.
++ *   - Conversation IDs are NOT echoed on stdout. AGY tracks them in
++ *     ~/.gemini/antigravity-cli/cache/last_conversations.json indexed by
++ *     workspace path. extractSessionIdFromExit reads this after each run
++ *     so the next request can pass --conversation <id>.
++ *   - AGY reads the prompt from stdin when launched as `agy --print`
++ *     with no positional argument. Stdin-pipe mode avoids the shell
++ *     quoting hazard that hits providers using `--prompt <content>` via
++ *     argv when the session-manager spawns with shell:true.
++ */
++export const agyProvider: ProviderConfig = {
++  binary: 'agy',
++  displayName: 'Antigravity CLI',
++  defaultModel: 'Gemini 3.5 Flash (Low)',
++  models: [
++    'Gemini 3.5 Flash (Low)',
++    'Gemini 3.5 Flash (High)',
++    'Gemini 3.5 Pro (Low)',
++    'Gemini 3.5 Pro (High)',
++  ],
++  mode: 'per-request',
++  emitsInit: false,
++  usesStdinPipe: true,
++  emitsJson: false,
++
++  buildSpawnArgs(resumeSessionId: string): string[] {
++    const args = ['--print', '--dangerously-skip-permissions'];
++    if (resumeSessionId) {
++      args.push('--conversation', resumeSessionId);
++    }
++    return args;
++  },
++
++  buildStdinMessage(content: string): string {
++    return content;
++  },
++
++  normalizeEventType(rawType: string): NormalizedEventType {
++    if (rawType === 'text') return 'text_delta';
++    if (rawType === 'result') return 'result';
++    if (rawType === 'error') return 'error';
++    return 'unknown';
++  },
++
++  extractTextContent(event: NdjsonEvent): string {
++    const e = event as Record<string, unknown>;
++    return (e.content as string) || (e.text as string) || '';
++  },
++
++  extractSessionIdFromExit(workspaceDir: string): string | null {
++    try {
++      const cacheFile = join(homedir(), '.gemini/antigravity-cli/cache/last_conversations.json');
++      const data = JSON.parse(readFileSync(cacheFile, 'utf8')) as Record<string, string>;
++      return data[workspaceDir] || null;
++    } catch {
++      return null;
++    }
++  },
++};
+diff --git a/src/providers/base.ts b/src/providers/base.ts
+index 21a521e..38ab33f 100644
+--- a/src/providers/base.ts
++++ b/src/providers/base.ts
+@@ -62,4 +62,24 @@ export interface ProviderConfig {
+    * Returns null if the event doesn't contain a session ID.
+    */
+   extractSessionId?(event: NdjsonEvent): string | null;
++
++  /**
++   * Whether the CLI emits NDJSON events on stdout.
++   *
++   * Defaults to `true` (existing providers: claude/gemini/codex).
++   * Set to `false` for CLIs that only print final plain text in their
++   * single-prompt mode (e.g. Antigravity CLI's `agy --print`). For these,
++   * session-manager bypasses the line-by-line JSON parser, accumulates
++   * full stdout, and synthesizes one text_delta + result event on exit.
++   */
++  emitsJson?: boolean;
++
++  /**
++   * Optional alternative to `extractSessionId` for providers that DO NOT
++   * emit their session/conversation ID on stdout, but write it to a
++   * known file on disk during the run (e.g. AGY's
++   * `~/.gemini/antigravity-cli/cache/last_conversations.json`).
++   * Called after the child process exits with code 0 in per-request mode.
++   */
++  extractSessionIdFromExit?(workspaceDir: string): string | null;
+ }
+diff --git a/src/providers/index.ts b/src/providers/index.ts
+index 9d9641c..726eb4e 100644
+--- a/src/providers/index.ts
++++ b/src/providers/index.ts
+@@ -3,6 +3,7 @@ import type { ProviderConfig } from './base.js';
+ import { claudeProvider } from './claude.js';
+ import { geminiProvider } from './gemini.js';
+ import { codexProvider } from './codex.js';
++import { agyProvider } from './agy.js';
+ 
+ // ── Provider Factory ────────────────────────────────────────────────
+ 
+@@ -10,6 +11,7 @@ const PROVIDER_MAP: Record<string, ProviderConfig> = {
+   claude: claudeProvider,
+   gemini: geminiProvider,
+   codex: codexProvider,
++  agy: agyProvider,
+ };
+ 
+ export function getProvider(name: string): ProviderConfig {
+diff --git a/src/session-manager.ts b/src/session-manager.ts
+index 49159f0..9ecca4e 100644
+--- a/src/session-manager.ts
++++ b/src/session-manager.ts
+@@ -379,14 +379,23 @@ export class SessionManager {
+         env: { ...process.env, ...this.provider.env },
+       });
+ 
+-      const rl = createInterface({ input: proc.stdout!, crlfDelay: Infinity });
++      const emitsJson = this.provider.emitsJson !== false;
++      const rl = emitsJson
++        ? createInterface({ input: proc.stdout!, crlfDelay: Infinity })
++        : null;
+ 
+       const events: NdjsonEvent[] = [];
+       let text = '';
+       const toolCalls: ToolCallEvent[] = [];
+       let settled = false;
+ 
+-      rl.on('line', (line) => {
++      // Plain-text providers (emitsJson: false) — accumulate stdout, no JSON parsing.
++      let rawStdout = '';
++      if (!emitsJson) {
++        proc.stdout?.on('data', (buf: Buffer) => { rawStdout += buf.toString(); });
++      }
++
++      rl?.on('line', (line) => {
+         const trimmed = line.trim();
+         if (!trimmed) return;
+ 
+@@ -457,11 +466,34 @@ export class SessionManager {
+       });
+ 
+       proc.on('exit', (code) => {
+-        rl.close();
++        rl?.close();
+         clearTimeout(timeout);
+         if (settled) return;
+         settled = true;
+ 
++        // Plain-text providers: synthesize events from accumulated stdout.
++        if (!emitsJson) {
++          const body = rawStdout.trim();
++          if (code === 0 && body) {
++            text = body;
++            const synthText: NdjsonEvent = { type: 'text', content: body };
++            const synthResult: NdjsonEvent = { type: 'result' };
++            events.push(synthText, synthResult);
++            if (request.onEvent) {
++              request.onEvent(synthText);
++              request.onEvent(synthResult);
++            }
++          }
++          // Capture session id from filesystem (e.g. AGY's last_conversations.json).
++          if (this.provider.extractSessionIdFromExit) {
++            const sid = this.provider.extractSessionIdFromExit(this.workspaceDir);
++            if (sid) {
++              this.lastProviderSessionId = sid;
++              console.log(`[session] Captured session ID from disk: ${sid.slice(0, 8)}...`);
++            }
++          }
++        }
++
+         if (code !== 0 && text === '' && events.length === 0) {
+           reject(new Error(
+             `${this.provider.displayName} exited with code ${code}. stderr: ${stderrOutput.slice(0, 500)}`
+@@ -472,7 +504,7 @@ export class SessionManager {
+       });
+ 
+       proc.on('error', (err) => {
+-        rl.close();
++        rl?.close();
+         clearTimeout(timeout);
+         if (!settled) { settled = true; reject(new Error(`Spawn error: ${err.message}`)); }
+       });
+-- 
+2.50.1 (Apple Git-155)
+

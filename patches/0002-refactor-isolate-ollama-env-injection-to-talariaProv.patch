@@ -1,7 +1,7 @@
 From 434387e0480c610344c46c6ddecdad8fa27d0c9e Mon Sep 17 00:00:00 2001
 From: Ramiz Mehran <ramiz.mehran@meesho.com>
 Date: Fri, 22 May 2026 10:45:32 +0530
-Subject: [PATCH 2/2] refactor: isolate ollama env injection to talariaProvider
+Subject: [PATCH 2/4] refactor: isolate ollama env injection to talariaProvider
 
 ---
  src/providers/claude.ts  | 4 ----

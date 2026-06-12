@@ -88,14 +88,14 @@ Squad-Mind/
 ├── ONBOARDING.md          # team-facing: Slack usage, POC flow, reading the brain
 ├── bootstrap/             # laptop stage scripts (00–90)
 ├── deploy/                # server: installer, systemd units, Slack manifest, ops scripts
-├── docs/                  # server-deployment.md, phase2-hardening.md
+├── docs/                  # server-deployment.md, phase2-hardening.md, llm-cli-proxy.md
 ├── templates/
 │   ├── vault/             # brain seed: agents, lab governance, project template
 │   ├── runtime/           # bot configs, launchd/systemd unit templates
 │   └── skills/run-poc/    # orchestrator playbook for chat-driven POC sessions
 ├── scripts/               # utilities (backup, restore, rotate-keys, health-check, …)
 ├── tests/                 # integration + crash-recovery tests
-└── tools/                 # vendored submodules (llm-cli-proxy)
+└── tools/                 # vendored submodules (llm-cli-proxy — see docs/llm-cli-proxy.md)
 ```
 
 ## For your team
