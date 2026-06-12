@@ -33,14 +33,18 @@ except ImportError:
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOME = os.path.expanduser("~")
-HERMES_HOME = os.path.join(HOME, ".hermes")
-VAULT = os.path.join(HOME, "Documents", "Home-Brain")
+# Live-deployment paths. Override via env when your layout differs from the
+# kit's defaults (e.g. a vault at a different path, or the lab project nested
+# under a parent initiative).
+HERMES_HOME = os.environ.get("SYNC_LIVE_HERMES_HOME", os.path.join(HOME, ".hermes"))
+VAULT = os.environ.get("SYNC_LIVE_VAULT", os.path.join(HOME, "Documents", "Home-Brain"))
 LAUNCH_AGENTS = os.path.join(HOME, "Library", "LaunchAgents")
 
-# Governance docs: template tree is rooted at projects/agent-distribution-lab/,
-# the live tree at projects/ai-blitz/sub-initiatives/agent-distribution-lab/.
+# Governance docs: template tree is rooted at projects/agent-distribution-lab/.
+# Fresh installs keep the same layout live; set SYNC_LIVE_GOV_ROOT when your
+# vault nests the lab under a parent project.
 GOV_TEMPLATE_ROOT = "projects/agent-distribution-lab"
-GOV_LIVE_ROOT = "projects/ai-blitz/sub-initiatives/agent-distribution-lab"
+GOV_LIVE_ROOT = os.environ.get("SYNC_LIVE_GOV_ROOT", GOV_TEMPLATE_ROOT)
 GOV_DOCS = ["profiles.md", "ranker.md", "poc-validation.md", "prompts/new-ws-bootstrap.md"]
 
 VAR_RE = re.compile(r"\{\{([A-Z_]+)\}\}")

@@ -39,9 +39,9 @@ vault-structure:governance/*:frontmatter
 # CLI ("Codex-orchestrator test").
 vault-structure:governance/profiles.md:headings
 
-# Live-only Meesho vault content (personal projects, areas, journal, brain
-# scratch notes) was deliberately stripped from the distributed kit, and the
-# live vault predates kit-only seeds (projects/README.md, projects/_template/).
+# Live-only vault content (a team's own projects, areas, journal, brain
+# scratch notes) is never part of the distributed kit, and an established
+# vault may predate kit-only seeds (projects/README.md, projects/_template/).
 vault-structure:projects/*
 vault-structure:areas/*
 vault-structure:journal/*

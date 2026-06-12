@@ -1,5 +1,5 @@
 From 0adbceeba5255ca5d6506cb24dea94624611dfd2 Mon Sep 17 00:00:00 2001
-From: Ramiz Mehran <ramiz.mehran@meesho.com>
+From: Squad-Mind <squad-mind@users.noreply.github.com>
 Date: Fri, 22 May 2026 10:40:00 +0530
 Subject: [PATCH 1/4] feat: add environment variable support to provider
  configuration
